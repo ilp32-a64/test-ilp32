@@ -1,0 +1,9 @@
+# toolchain sources, build directories, install prefix, logs
+/toolchain/src/
+/toolchain/build/
+/toolchain/out/
+/toolchain/logs/
+# built test programs, QEMU kernels, initramfs, console logs
+/tests/out/
+/qemu/out/
+*.log
