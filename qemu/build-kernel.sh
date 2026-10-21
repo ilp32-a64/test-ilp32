@@ -30,7 +30,7 @@ for o in COMPAT ARM64_ILP32 COMPAT_32BIT_TIME BLK_DEV_INITRD DEVTMPFS SERIAL_AMB
 done
 echo "==> $(grep -E '^(# )?CONFIG_AARCH32_EL0[= ]' $O/.config)"
 echo "==> build Image ($(date +%H:%M))"
-$M -s -j"$(nproc)" Image
+$M -s -j"$JOBS" Image
 cp $O/arch/arm64/boot/Image "$Q/out/Image-$N"
 cp $O/.config "$Q/out/config-$N"
 echo "==> $Q/out/Image-$N ($(stat -c %s "$Q/out/Image-$N") bytes, $(cat $O/include/config/kernel.release))"

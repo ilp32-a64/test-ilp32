@@ -39,7 +39,7 @@ sudo apt-get install build-essential g++ gawk m4 bzip2 flex bison bc libssl-dev 
     gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu gcc-arm-linux-gnueabihf qemu-system-arm
 ```
 
-Kernel trees (defaults in `kernel/env.sh`): a clone of `ilp32-a64/linux` in `~/work/linux`, one work tree per
+Parallel jobs: `JOBS=<n>` (default: all CPUs). Kernel trees (defaults in `kernel/env.sh`): a clone of `ilp32-a64/linux` in `~/work/linux`, one work tree per
 branch in `~/work/wt/<branch>`, build directories in `~/work/build/`.
 
 ```

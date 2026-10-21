@@ -30,9 +30,9 @@ grep -q "unmet direct dependencies" $OUT/olddefconfig.log && { echo "ERROR: Kcon
 grep -E '^(# )?CONFIG_(COMPAT|AARCH32_EL0|ARM64_ILP32|ARM64_PTR_AUTH)[= ]' $OUT/.config
 grep -q '^CONFIG_ARM64_ILP32=y' $OUT/.config || { echo "ERROR: ARM64_ILP32 not enabled"; exit 1; }
 
-echo "==> build ${TARGETS[*]} (-j$(nproc))"
+echo "==> build ${TARGETS[*]} (-j$JOBS)"
 start=$(date +%s)
-if $M -j$(nproc) "${TARGETS[@]}" > $OUT.log 2>&1; then
+if $M -j$JOBS "${TARGETS[@]}" > $OUT.log 2>&1; then
 	echo "==> BUILD OK in $(( $(date +%s) - start )) s"
 else
 	echo "==> BUILD FAILED (see $OUT.log)"; grep -nE 'error:|Error [0-9]|FORCE prerequisite' $OUT.log | head -30; exit 1

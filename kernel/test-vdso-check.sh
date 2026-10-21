@@ -17,7 +17,7 @@ extern int ilp32_vdso_reloc_test_sym;
 int * const ilp32_vdso_reloc_test __attribute__((section(".rodata"), used)) = &ilp32_vdso_reloc_test_sym;
 EOF
 rc=1
-if make -s -C $WT O=$KERNEL_BUILD/$BR -j$(nproc) Image 2>&1 | grep -q "dynamic relocations are not supported"; then
+if make -s -C $WT O=$KERNEL_BUILD/$BR -j$JOBS Image 2>&1 | grep -q "dynamic relocations are not supported"; then
 	echo "==> PASS: vDSO link refused the relocation"; rc=0
 else
 	echo "==> FAIL: vDSO link did not refuse the relocation"

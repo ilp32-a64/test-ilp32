@@ -28,7 +28,7 @@ GCC=gcc-10.5.0
 # glibc 2.30 with AArch64 ILP32: sourceware branch arm/ilp32 + our fixes (branch ilp32-2.30)
 GLIBC_REPO=${GLIBC_REPO:-https://github.com/ilp32-a64/glibc.git}
 GLIBC_REF=${GLIBC_REF:-ilp32-2.30}
-J=$(nproc)
+J=${JOBS:-$(nproc)}
 export PATH=$PREFIX/bin:$PATH
 export MAKEINFO=true          # documentation is not needed
 mkdir -p "$SRC" "$B" "$LOGS"
