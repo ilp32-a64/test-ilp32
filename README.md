@@ -1,8 +1,8 @@
-# ilp32-test
+# test-ilp32
 
 Toolchain and tests for the AArch64 ILP32 ABI (32-bit `long` and pointers on a 64-bit kernel).
-The kernel branches are in [ilp32-a64/linux](https://github.com/ilp32-a64/linux), the C library in
-[ilp32-a64/glibc](https://github.com/ilp32-a64/glibc).
+The kernel branches are in [ilp32-a64/linux-ilp32](https://github.com/ilp32-a64/linux-ilp32), the C library in
+[ilp32-a64/glibc-ilp32](https://github.com/ilp32-a64/glibc-ilp32).
 
 QEMU user mode has no AArch64 ILP32 support, so the tests boot our kernel in QEMU system emulation
 (`qemu-system-aarch64 -M virt -cpu cortex-a35 -smp 2 -m 256`) with a small initramfs, run the test programs
@@ -12,7 +12,7 @@ and power off.
 
 | Path | Content |
 |---|---|
-| `toolchain/build-toolchain.sh` | ILP32 cross toolchain `aarch64-linux-gnu_ilp32`: binutils 2.35.2, GCC 10.5, glibc 2.30 (`ilp32-a64/glibc` branch `ilp32-2.30`), kernel headers from an ILP32 kernel tree |
+| `toolchain/build-toolchain.sh` | ILP32 cross toolchain `aarch64-linux-gnu_ilp32`: binutils 2.35.2, GCC 10.5, glibc 2.30 (`ilp32-a64/glibc-ilp32` branch `ilp32-2.30`), kernel headers from an ILP32 kernel tree |
 | `tests/` | test programs (`build.sh` builds them into `tests/out/`) |
 | `qemu/` | QEMU kernel (`build-kernel.sh`), initramfs with a static ILP32 `/init` (`init.c`, `make-initramfs.sh`), boot and test (`run.sh`) |
 | `kernel/` | kernel build test (`build.sh`), AArch32 on/off check (`verify.sh`), vDSO relocation check test (`test-vdso-check.sh`), paths (`env.sh`) |
@@ -39,11 +39,11 @@ sudo apt-get install build-essential g++ gawk m4 bzip2 flex bison bc libssl-dev 
     gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu gcc-arm-linux-gnueabihf qemu-system-arm
 ```
 
-Parallel jobs: `JOBS=<n>` (default: all CPUs). Kernel trees (defaults in `kernel/env.sh`): a clone of `ilp32-a64/linux` in `~/work/linux`, one work tree per
+Parallel jobs: `JOBS=<n>` (default: all CPUs). Kernel trees (defaults in `kernel/env.sh`): a clone of `ilp32-a64/linux-ilp32` in `~/work/linux-ilp32`, one work tree per
 branch in `~/work/wt/<branch>`, build directories in `~/work/build/`.
 
 ```
-git clone https://github.com/ilp32-a64/linux.git ~/work/linux
+git clone https://github.com/ilp32-a64/linux-ilp32.git ~/work/linux-ilp32
 ./run-all.sh ilp32-6.12 ilp32-6.6 ilp32-5.10
 ```
 

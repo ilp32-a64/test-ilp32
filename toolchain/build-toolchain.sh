@@ -1,9 +1,9 @@
 #!/bin/bash
 # AArch64 ILP32 cross toolchain: binutils 2.35.2, GCC 10.5 (GNU release tarballs), glibc 2.30 (branch
-# ilp32-2.30 of ilp32-a64/glibc = sourceware arm/ilp32 + fixes), kernel headers from an ILP32 kernel tree.
+# ilp32-2.30 of ilp32-a64/glibc-ilp32 = sourceware arm/ilp32 + fixes), kernel headers from an ILP32 kernel tree.
 #
 #   build-toolchain.sh [kernel source tree]      (default ~/work/wt/ilp32-6.6)
-#   GLIBC_REPO=<url or path> GLIBC_REF=<branch>  other glibc source (default ilp32-a64/glibc ilp32-2.30)
+#   GLIBC_REPO=<url or path> GLIBC_REF=<branch>  other glibc source (default ilp32-a64/glibc-ilp32 ilp32-2.30)
 #
 #   target          aarch64-linux-gnu_ilp32 (GCC default -mabi=ilp32)
 #   dynamic linker  /lib/ld-linux-aarch64_ilp32.so.1, libraries in /libilp32 and /usr/libilp32
@@ -26,7 +26,7 @@ LOGS=$TOP/logs
 BINUTILS=binutils-2.35.2
 GCC=gcc-10.5.0
 # glibc 2.30 with AArch64 ILP32: sourceware branch arm/ilp32 + our fixes (branch ilp32-2.30)
-GLIBC_REPO=${GLIBC_REPO:-https://github.com/ilp32-a64/glibc.git}
+GLIBC_REPO=${GLIBC_REPO:-https://github.com/ilp32-a64/glibc-ilp32.git}
 GLIBC_REF=${GLIBC_REF:-ilp32-2.30}
 J=${JOBS:-$(nproc)}
 export PATH=$PREFIX/bin:$PATH
@@ -120,7 +120,7 @@ smoke() {
 	done
 	$T-gcc -v 2>&1 | tail -1
 	echo "multi-os-directory: $($T-gcc -print-multi-os-directory)"
-	# glibc must look up the ILP32 vDSO with the kernel's version (ilp32-a64/glibc ilp32-2.30)
+	# glibc must look up the ILP32 vDSO with the kernel's version (ilp32-a64/glibc-ilp32 ilp32-2.30)
 	grep -c 'LINUX_4.12' "$SYSROOT"/libilp32/libc.so.6 && echo "libc.so.6 references LINUX_4.12"
 }
 
