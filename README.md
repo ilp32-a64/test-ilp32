@@ -44,7 +44,7 @@ branch in `~/work/wt/<branch>`, build directories in `~/work/build/`.
 
 ```
 git clone https://github.com/ilp32-a64/linux.git ~/work/linux
-./run-all.sh ilp32-6.6 ilp32-5.10
+./run-all.sh ilp32-6.12 ilp32-6.6 ilp32-5.10
 ```
 
 `run-all.sh` builds the toolchain once (about 15 minutes on 6 cores), then for each branch a full kernel
@@ -61,6 +61,8 @@ build with AArch32 and the QEMU test with AArch32 on and off. Single steps:
 
 | Kernel | AArch32 | ILP32 tests | `aarch32-test` | vDSO `clock_gettime` / system call (QEMU) |
 |---|---|---|---|---|
+| `ilp32-6.12` | on | 3/3 pass | pass | ~0.1 us / ~16 us |
+| `ilp32-6.12` | off | 3/3 pass | refused (`ENOEXEC`) | |
 | `ilp32-6.6` | on | 3/3 pass | pass | ~0.1 us / ~15 us |
 | `ilp32-6.6` | off | 3/3 pass | refused (`ENOEXEC`) | |
 | `ilp32-5.10` | on | 3/3 pass | pass | ~0.1 us / ~14 us |
