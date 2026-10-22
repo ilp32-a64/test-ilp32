@@ -17,6 +17,9 @@ and power off.
 | `qemu/` | QEMU kernel (`build-kernel.sh`), initramfs with a static ILP32 `/init` (`init.c`, `make-initramfs.sh`), boot and test (`run.sh`) |
 | `kernel/` | kernel build test (`build.sh`), AArch32 on/off check (`verify.sh`), vDSO relocation check test (`test-vdso-check.sh`), paths (`env.sh`) |
 | `run-all.sh` | everything for one or more kernel branches |
+| `musl/` | musl 1.2.5 for AArch64 ILP32 (`ilp32-a64/musl-ilp32`, branch `ilp32-1.2.5`): cross toolchain `aarch64-linux-musl_ilp32` with the versions and patches of OpenWrt 25.12 (`toolchain/`), QEMU tests and libc-test (`test/`) |
+| `glibc/` | glibc 2.41 for AArch64 ILP32 (`ilp32-a64/glibc-ilp32`, branch `ilp32-2.41`, 64-bit `time_t`): cross toolchain `aarch64-linux-gnu_ilp32` with plain GCC 14.3.0 and binutils 2.44 (`toolchain/`), `build-glibc.sh`, `rebuild-all.sh`, LP64 regression check (`lp64-check.sh`), QEMU tests (`test/`) |
+| `qemu/notime32-init.c` | `/init` for `NOTIME32=1` test runs (see below) |
 
 ## Tests
 
@@ -56,6 +59,25 @@ build with AArch32 and the QEMU test with AArch32 on and off. Single steps:
 ./qemu/run.sh ilp32-6.6            # AARCH32=0 for a kernel without AARCH32_EL0
 ./kernel/test-vdso-check.sh ilp32-6.6
 ```
+
+## C libraries: musl and glibc 2.41
+
+The scripts in `musl/` and `glibc/` run from this tree and keep sources, toolchains, builds and results in a
+work directory: `MUSL_WORK` (default `~/work/ilp32-musl`) and `GLIBC_WORK` (default `~/work/ilp32-glibc`).
+Kernel headers come from `~/work/wt/ilp32-6.12`, musl from `~/work/musl-ilp32`, glibc from
+`~/work/glibc-ilp32-2.41`. Each script describes its options in its header.
+
+```
+musl/toolchain/build-stage1.sh && musl/toolchain/build-stage2.sh
+musl/test/run-musl-test.sh                  # installs MUSL_BUILD (default $MUSL_WORK/build-musl) first
+musl/test/build-busybox.sh && ABI=ilp32 musl/test/run-libc-test.sh     # libc-test in ~/work/libc-test
+glibc/rebuild-all.sh                        # stage 1, glibc, stage 2 (C++), QEMU tests
+```
+
+`NOTIME32=1` on the test scripts boots with `qemu/notime32-init.c` as `/init`: a seccomp filter makes every
+time32 and stat64 system call of the ILP32 ABI fail with `SIGSYS` for the whole run, so a C library that
+still uses one is caught. Results on `ilp32-6.12`: musl and glibc pass with `NOTIME32=1`; libc-test fails
+the same tests as on LP64 (tests newer than musl 1.2.5, root resource limits).
 
 ## Results
 
