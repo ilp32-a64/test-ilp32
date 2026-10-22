@@ -76,8 +76,22 @@ glibc/rebuild-all.sh                        # stage 1, glibc, stage 2 (C++), QEM
 
 `NOTIME32=1` on the test scripts boots with `qemu/notime32-init.c` as `/init`: a seccomp filter makes every
 time32 and stat64 system call of the ILP32 ABI fail with `SIGSYS` for the whole run, so a C library that
-still uses one is caught. Results on `ilp32-6.12`: musl and glibc pass with `NOTIME32=1`; libc-test fails
-the same tests as on LP64 (tests newer than musl 1.2.5, root resource limits).
+still uses one is caught.
+
+Results on `ilp32-6.12.y` (QEMU, kernel without AArch32):
+
+| Test | Normal | `NOTIME32=1` |
+|---|---|---|
+| musl 1.2.5: `musl-test` (static, dynamic), `cxx-test`, `syscall-test` | 4/4 pass | 3/3 pass (`syscall-test` calls time32 on purpose, not run) |
+| musl 1.2.5: libc-test with busybox | 453/480 pass | 453/480 pass, no `SIGSYS` |
+| glibc 2.41: `glibc-test`, `cxx-test`, libc tests (static, dynamic), `syscall-test` | 5/5 pass | 4/4 pass |
+| glibc 2.30 (`toolchain/`): `glibc-test`, `cxx-test`, `syscall-test`, `aarch32-test` | 4/4 pass | |
+
+libc-test counts a test as failed when it exits non-zero or prints anything. Of the 27, 9 exit non-zero:
+mntent, strptime, strtold and pthread_atfork-errno-clobber (static and dynamic) and powf, tests newer
+than musl 1.2.5 or affected by the root resource limits; the other 18 print accuracy notes (math) or
+diagnostics (wordexp) and exit 0. The LP64 musl fails the same tests (plus 8 that need a shell: its
+run had no busybox).
 
 ## Results
 
