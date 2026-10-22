@@ -2,7 +2,7 @@
 # Test the AArch64 ILP32 glibc 2.41 (build-glibc.sh, installed in the toolchain sysroot) in QEMU system
 # emulation on an ILP32 kernel. QEMU user mode has no ILP32 support.
 #
-#   run-glibc-test.sh [kernel Image]     (default test-ilp32 qemu/out/Image-ilp32-6.12-noa32)
+#   run-glibc-test.sh [kernel Image]     (default test-ilp32 qemu/out/Image-ilp32-6.12.y-noa32)
 #   KAPPEND=<kernel arguments>           added to the kernel command line, e.g. print-fatal-signals=1
 #   NOTIME32=1                          forbid the time32 and stat64 system calls (seccomp, SIGSYS) in
 #                                       the whole run: /init is notime32-init.c, the real init /init.real
@@ -25,7 +25,7 @@ cd "$WORK/test"
 TOP=$PWD
 ILP32_TEST=${ILP32_TEST:-$(realpath "$R/../..")}
 MUSL_TEST=${MUSL_TEST:-$ILP32_TEST/musl/test}
-IMAGE=${1:-$ILP32_TEST/qemu/out/Image-ilp32-6.12-noa32}
+IMAGE=${1:-$ILP32_TEST/qemu/out/Image-ilp32-6.12.y-noa32}
 T=aarch64-linux-gnu_ilp32
 TC=$TOP/../toolchain/out
 SYSROOT=$TC/$T/sysroot
@@ -46,14 +46,7 @@ if [ -n "${NOTIME32:-}" ]; then
 	echo "    NOTIME32: time32 and stat64 system calls forbidden (seccomp)"
 	CFLAGS="$CFLAGS -DNOTIME32"
 fi
-GLIBC_TEST=$ILP32_TEST/tests/glibc-test.c
-if [ -n "${NOTIME32:-}" ]; then
-	# glibc-test compares the vDSO with the time32 clock_gettime system call (into a 64-bit timespec):
-	# use clock_gettime64 in a copy
-	sed "s/SYS_clock_gettime,/SYS_clock_gettime64,/" "$GLIBC_TEST" > "$W/glibc-test-notime32.c"
-	GLIBC_TEST=$W/glibc-test-notime32.c
-fi
-$CC $DYN -O2 -Wall -pthread -o "$W/tests/glibc-test-ilp32" "$GLIBC_TEST" -ldl
+$CC $DYN -O2 -Wall -pthread -o "$W/tests/glibc-test-ilp32" "$ILP32_TEST/tests/glibc-test.c" -ldl
 $CC -static -nostdlib -ffreestanding -fno-stack-protector -fno-builtin -O2 -Wall -Wl,--build-id=none \
 	-o "$W/tests/syscall-test-ilp32" "$ILP32_TEST/tests/syscall-test.c" -lgcc
 # syscall-test calls the time32 clock_gettime on purpose (kernel ABI test, no C library): not with NOTIME32

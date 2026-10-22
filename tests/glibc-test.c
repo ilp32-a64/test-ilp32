@@ -22,6 +22,17 @@
 #include <time.h>
 #include <unistd.h>
 
+/* The raw clock_gettime system call that matches struct timespec: clock_gettime64 for a 64-bit time_t
+ * on ILP32 (its uapi has no time32 SYS_clock_gettime), clock_gettime for the 32-bit time_t of glibc
+ * 2.30 and for LP64. */
+#ifndef SYS_clock_gettime
+# define SYS_CLOCK_GETTIME SYS_clock_gettime64
+#elif defined SYS_clock_gettime64
+# define SYS_CLOCK_GETTIME (sizeof(time_t) == 8 ? SYS_clock_gettime64 : SYS_clock_gettime)
+#else
+# define SYS_CLOCK_GETTIME SYS_clock_gettime
+#endif
+
 static int fails;
 static void check(const char *what, int ok)
 {
@@ -95,7 +106,7 @@ int main(void)
 		clock_gettime(CLOCK_MONOTONIC, &ts);
 	double t1 = now();
 	for (int i = 0; i < n; i++)
-		syscall(SYS_clock_gettime, CLOCK_MONOTONIC, &ts);
+		syscall(SYS_CLOCK_GETTIME, CLOCK_MONOTONIC, &ts);
 	double t2 = now();
 	double libc_ns = (t1 - t0) / n * 1e9, sys_ns = (t2 - t1) / n * 1e9;
 	printf("  clock_gettime: libc %.0f ns/call, raw syscall %.0f ns/call (ratio %.1f)\n",
@@ -104,10 +115,10 @@ int main(void)
 	/* the vDSO time must advance like the kernel's: compare both over a 200 ms sleep */
 	struct timespec v0, v1, s0, s1;
 	clock_gettime(CLOCK_MONOTONIC, &v0);
-	syscall(SYS_clock_gettime, CLOCK_MONOTONIC, &s0);
+	syscall(SYS_CLOCK_GETTIME, CLOCK_MONOTONIC, &s0);
 	usleep(200000);
 	clock_gettime(CLOCK_MONOTONIC, &v1);
-	syscall(SYS_clock_gettime, CLOCK_MONOTONIC, &s1);
+	syscall(SYS_CLOCK_GETTIME, CLOCK_MONOTONIC, &s1);
 	double dv = (v1.tv_sec - v0.tv_sec) + (v1.tv_nsec - v0.tv_nsec) / 1e9;
 	double ds = (s1.tv_sec - s0.tv_sec) + (s1.tv_nsec - s0.tv_nsec) / 1e9;
 	printf("  200 ms sleep: vDSO %.6f s, syscall %.6f s\n", dv, ds);
