@@ -1,7 +1,7 @@
 #!/bin/bash
 # Build libc-test with musl and run it in QEMU system emulation on an ILP32 kernel.
 #
-#   run-libc-test.sh [kernel Image]     (default ilp32-test qemu/out/Image-ilp32-6.12-noa32)
+#   run-libc-test.sh [kernel Image]     (default test-ilp32 qemu/out/Image-ilp32-6.12.y-noa32)
 #   ABI=ilp32                           AArch64 ILP32: the toolchain of ../toolchain, musl installed from
 #                                       ../build-musl (default)
 #   ABI=lp64                            AArch64 LP64 reference: the same musl tree built with
@@ -29,7 +29,7 @@ ABI=${ABI:-ilp32}
 ILP32_TEST=${ILP32_TEST:-$(realpath "$R/../..")}
 LIBC_TEST=$(realpath "${LIBC_TEST:-$HOME/work/libc-test}")
 MUSL_SRC=$(realpath "${MUSL_SRC:-$HOME/work/musl-ilp32}")
-IMAGE=${1:-$ILP32_TEST/qemu/out/Image-ilp32-6.12-noa32}
+IMAGE=${1:-$ILP32_TEST/qemu/out/Image-ilp32-6.12.y-noa32}
 O=$TOP/out/${TAG:-$ABI}
 BD=$O/libc-test-build
 mkdir -p "$O"

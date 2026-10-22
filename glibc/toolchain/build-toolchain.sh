@@ -4,7 +4,7 @@
 #   stage 1 (default): GCC C only, no C library; glibc (../build-glibc.sh) is built with it
 #   stage 2 (STAGE=2, after glibc is installed in the sysroot): GCC C and C++, libgcc_s, libstdc++
 #
-#   build-toolchain.sh [kernel source tree]     (default ~/work/wt/ilp32-6.12)
+#   build-toolchain.sh [kernel source tree]     (default ~/work/wt/ilp32-6.12.y)
 #   STAGE=2 build-toolchain.sh
 #
 #   target          aarch64-linux-gnu_ilp32 (GCC default -mabi=ilp32)
@@ -19,7 +19,7 @@ WORK=${GLIBC_WORK:-$HOME/work/ilp32-glibc}	# toolchain, builds and results (not 
 mkdir -p "$WORK/toolchain"
 cd "$WORK/toolchain"
 TOP=$PWD
-KSRC=$(realpath "${1:-$HOME/work/wt/ilp32-6.12}")
+KSRC=$(realpath "${1:-$HOME/work/wt/ilp32-6.12.y}")
 T=aarch64-linux-gnu_ilp32
 PREFIX=$TOP/out
 HOSTPREFIX=$TOP/out-host

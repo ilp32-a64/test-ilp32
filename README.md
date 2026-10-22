@@ -64,7 +64,7 @@ build with AArch32 and the QEMU test with AArch32 on and off. Single steps:
 
 The scripts in `musl/` and `glibc/` run from this tree and keep sources, toolchains, builds and results in a
 work directory: `MUSL_WORK` (default `~/work/ilp32-musl`) and `GLIBC_WORK` (default `~/work/ilp32-glibc`).
-Kernel headers come from `~/work/wt/ilp32-6.12`, musl from `~/work/musl-ilp32`, glibc from
+Kernel headers come from `~/work/wt/ilp32-6.12.y`, musl from `~/work/musl-ilp32`, glibc from
 `~/work/glibc-ilp32-2.41`. Each script describes its options in its header.
 
 ```

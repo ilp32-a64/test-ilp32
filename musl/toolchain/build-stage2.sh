@@ -4,7 +4,7 @@
 # ILP32 port), then the final GCC 14.3.0 with C and C++ and the OpenWrt toolchain/gcc options
 # (common.mk, final/Makefile): shared libgcc, libstdc++, libatomic.
 #
-#   build-stage2.sh [kernel source tree]      (default ~/work/wt/ilp32-6.12)
+#   build-stage2.sh [kernel source tree]      (default ~/work/wt/ilp32-6.12.y)
 #   MUSL_SRC=<musl source tree>               (default ~/work/musl-ilp32, the checked out branch is used)
 #
 #   musl layout as OpenWrt: libraries and the dynamic linker in /lib, headers in /usr/include
@@ -14,7 +14,7 @@ WORK=${MUSL_WORK:-$HOME/work/ilp32-musl}	# toolchain, builds and results (not in
 mkdir -p "$WORK/toolchain"
 cd "$WORK/toolchain"
 TOP=$PWD
-KSRC=$(realpath "${1:-$HOME/work/wt/ilp32-6.12}")
+KSRC=$(realpath "${1:-$HOME/work/wt/ilp32-6.12.y}")
 MUSL_SRC=$(realpath "${MUSL_SRC:-$HOME/work/musl-ilp32}")
 T=aarch64-linux-musl_ilp32
 PREFIX=$TOP/out

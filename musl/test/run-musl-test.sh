@@ -3,7 +3,7 @@
 #   install musl (build-musl/) into the toolchain sysroot, build /init (ilp32-test qemu/init.c) and the test
 #   programs with it, pack an initramfs and boot the kernel. QEMU user mode has no ILP32 support.
 #
-#   run-musl-test.sh [kernel Image]     (default ilp32-test qemu/out/Image-ilp32-6.12-noa32)
+#   run-musl-test.sh [kernel Image]     (default test-ilp32 qemu/out/Image-ilp32-6.12.y-noa32)
 #   KAPPEND=<kernel arguments>          added to the kernel command line, e.g. print-fatal-signals=1
 #   NOTIME32=1                          forbid the time32 and stat64 system calls (seccomp, SIGSYS) in
 #                                       the whole run: /init is notime32-init.c, the real init /init.real
@@ -24,7 +24,7 @@ mkdir -p "$WORK/test"
 cd "$WORK/test"
 TOP=$PWD
 ILP32_TEST=${ILP32_TEST:-$(realpath "$R/../..")}
-IMAGE=${1:-$ILP32_TEST/qemu/out/Image-ilp32-6.12-noa32}
+IMAGE=${1:-$ILP32_TEST/qemu/out/Image-ilp32-6.12.y-noa32}
 T=aarch64-linux-musl_ilp32
 TC=$TOP/../toolchain/out
 SYSROOT=$TC/$T/sysroot
