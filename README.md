@@ -12,7 +12,7 @@ and power off.
 
 | Path | Content |
 |---|---|
-| `toolchain/build-toolchain.sh` | ILP32 cross toolchain `aarch64-linux-gnu_ilp32`: binutils 2.35.2, GCC 10.5, glibc 2.30 (`ilp32-a64/glibc-ilp32` branch `ilp32-2.30`), kernel headers from an ILP32 kernel tree |
+| `toolchain/build-toolchain.sh` | ILP32 cross toolchain `aarch64-linux-gnu_ilp32`: binutils 2.35.2, GCC 10.5, glibc 2.30 (`ilp32-a64/glibc-ilp32` branch `ilp32-2.30`), kernel headers from an ILP32 kernel tree. **Deprecated**: no longer used or tested; the current toolchain and C library are in `glibc/` (glibc 2.41) |
 | `tests/` | test programs (`build.sh` builds them into `tests/out/`) |
 | `qemu/` | QEMU kernel (`build-kernel.sh`), initramfs with a static ILP32 `/init` (`init.c`, `make-initramfs.sh`), boot and test (`run.sh`) |
 | `kernel/` | kernel build test (`build.sh`), AArch32 on/off check (`verify.sh`), vDSO relocation check test (`test-vdso-check.sh`), paths (`env.sh`) |
@@ -85,7 +85,7 @@ Results on `ilp32-6.12.y` (QEMU, kernel without AArch32):
 | musl 1.2.5: `musl-test` (static, dynamic), `cxx-test`, `syscall-test` | 4/4 pass | 3/3 pass (`syscall-test` calls time32 on purpose, not run) |
 | musl 1.2.5: libc-test with busybox | 453/480 pass | 453/480 pass, no `SIGSYS` |
 | glibc 2.41: `glibc-test`, `cxx-test`, libc tests (static, dynamic), `syscall-test` | 5/5 pass | 4/4 pass |
-| glibc 2.30 (`toolchain/`): `glibc-test`, `cxx-test`, `syscall-test`, `aarch32-test` | 4/4 pass | |
+| glibc 2.30 (`toolchain/`, deprecated): `glibc-test`, `cxx-test`, `syscall-test`, `aarch32-test` | 4/4 pass | |
 
 libc-test counts a test as failed when it exits non-zero or prints anything. Of the 27, 9 exit non-zero:
 mntent, strptime, strtold and pthread_atfork-errno-clobber (static and dynamic) and powf, tests newer
