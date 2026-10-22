@@ -22,6 +22,7 @@ initramfs, run the test programs and power off.
 | `musl/` | musl 1.2.5 for AArch64 ILP32 (`ilp32-a64/musl-ilp32`, branch `ilp32-1.2.5`): cross toolchain `aarch64-linux-musl_ilp32` with the versions and patches of OpenWrt 25.12 (`toolchain/`), QEMU tests and libc-test (`test/`) |
 | `glibc/` | glibc 2.41 for AArch64 ILP32 (`ilp32-a64/glibc-ilp32`, branch `ilp32-2.41`, 64-bit `time_t`): cross toolchain `aarch64-linux-gnu_ilp32` with GCC 14.3.0 and binutils 2.44 (`toolchain/`; GCC with the ILP32 fixes in `toolchain/patches/`), `build-glibc.sh`, `rebuild-all.sh`, LP64 regression check (`lp64-check.sh`), QEMU tests (`test/`) |
 | `qemu/notime32-init.c` | `/init` for `NOTIME32=1` test runs (see below) |
+| `openwrt/` | QEMU tests of an OpenWrt armsr/armv8 ILP32 image (`ilp32-a64/openwrt-ilp32`, branch `ilp32-25.12`) |
 
 ## Tests
 
@@ -94,6 +95,26 @@ mntent, strptime, strtold and pthread_atfork-errno-clobber (static and dynamic) 
 than musl 1.2.5 or affected by the root resource limits; the other 18 print accuracy notes (math) or
 diagnostics (wordexp) and exit 0. The LP64 musl fails the same tests (plus 8 that need a shell: its
 run had no busybox).
+
+## OpenWrt
+
+`openwrt/run-openwrt-qemu.sh` boots the armsr/armv8 ILP32 initramfs image of an OpenWrt tree
+(`OPENWRT`, default `~/work/openwrt-ilp32`, built with the AArch64 ILP32 user-land ABI) in QEMU and checks
+it over the serial console (`openwrt-qemu-test.py`, Python 3 with pexpect). The image is not changed: a
+second initramfs (`-initrd`) adds the test programs, built with the toolchain of the OpenWrt tree. Checks:
+boot, kernel version, the ILP32 dynamic linker, ubus, the procd services, WAN by DHCP and LAN, firewall4,
+uci, time, `musl-test` (dynamic with the C library of the image, and static), `syscall-test`, and no
+crashes in `logread` or warnings in `dmesg`. `NOTIME32=1` runs the whole system (procd and everything it
+starts) under the seccomp filter of `qemu/notime32-init.c`. The exit code is the number of failed checks.
+
+```
+openwrt/run-openwrt-qemu.sh                          # QEMU_CPU, default cortex-a53
+NOTIME32=1 openwrt/run-openwrt-qemu.sh
+openwrt/run-armsr-matrix.sh                          # cortex-a53 and max (PAC, BTI, SVE), each with NOTIME32=0/1
+```
+
+Results (OpenWrt 25.12.6 with kernel 6.12.114 and `ilp32-6.12.y` `a2b38d6f5f`, pointer authentication,
+BTI and SVE on): cortex-a53 and max, 23/23 checks pass, and 22/22 with `NOTIME32=1`.
 
 ## Results
 
