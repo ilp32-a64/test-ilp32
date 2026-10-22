@@ -1,0 +1,121 @@
+From: liviyifan <344781483+liviyifan@users.noreply.github.com>
+Subject: [PATCH] libgcc: AArch64 ILP32: unwind through frames with signed return addresses
+
+The libgcc unwinder ignored return address signing for ILP32:
+DW_CFA_GNU_window_save (AArch64's DW_CFA_AARCH64_negate_ra_state) was
+taken as the SPARC register window save, which marks x16-x31 as saved at
+bogus offsets, and aarch64-unwind.h was disabled. Unwinding through a frame
+built with -mbranch-protection=pac-ret (clang supports it for ILP32; GCC
+does not) therefore crashed: C++ exceptions, backtrace(), pthread_cancel
+cleanups. This happened on every CPU, also on those without pointer
+authentication, where the signing instructions are NOPs.
+
+- Treat DW_CFA_GNU_window_save as negate_ra_state for ILP32 too and use
+  aarch64-unwind.h for ILP32 (not its SME part: there is no SME ABI for
+  ILP32).
+- The signature is in the upper bits of the saved 64-bit register, so
+  authenticate the whole _Unwind_Word before it becomes a 32-bit pointer.
+  __builtin_aarch64_auti[ab]1716 take a pointer, so use AUTIA1716 and
+  AUTIB1716 directly, written as HINT so that no -march is needed.
+- Convert the CFA (the salt) through _Unwind_Ptr: GCC sign-extends a 32-bit
+  pointer converted to a 64-bit integer, and the stack of an ILP32 process
+  is just below 4 GiB, so the salt did not match the one used for signing
+  and authentication failed (SIGILL with FEAT_FPAC).
+
+Tested with QEMU (-cpu max with FEAT_FPAC, and cortex-a35) on the arm64
+ilp32-6.12.y kernel with pointer authentication: C++ exceptions with the A
+key, the B key and pac-ret+leaf, backtrace() and pthread_cancel (cleanup
+handlers and the cleanup attribute) through clang -mbranch-protection
+frames, static and with libgcc_s.so.1.
+
+Signed-off-by: liviyifan <344781483+liviyifan@users.noreply.github.com>
+---
+--- a/libgcc/config/aarch64/aarch64-unwind.h
++++ b/libgcc/config/aarch64/aarch64-unwind.h
+@@ -22,7 +22,7 @@
+ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
+ <http://www.gnu.org/licenses/>.  */
+ 
+-#if !defined (AARCH64_UNWIND_H) && !defined (__ILP32__)
++#if !defined (AARCH64_UNWIND_H)
+ #define AARCH64_UNWIND_H
+ 
+ #define DWARF_REGNUM_AARCH64_RA_STATE 34
+@@ -48,6 +48,23 @@
+   return 0;
+ }
+ 
++#ifdef __ILP32__
++/* ILP32: authenticate the 64-bit return address ADDR, signed with the A key
++   (or the B key if B_KEY) and SALT, before it is truncated to a pointer.  */
++
++static inline _Unwind_Word
++aarch64_ilp32_authenticate (_Unwind_Word addr, _Unwind_Word salt, int b_key)
++{
++  if (b_key)
++    __asm__ ("mov x17, %0\n\tmov x16, %1\n\thint 14 // autib1716\n\tmov %0, x17"
++	     : "+r" (addr) : "r" (salt) : "x16", "x17");
++  else
++    __asm__ ("mov x17, %0\n\tmov x16, %1\n\thint 12 // autia1716\n\tmov %0, x17"
++	     : "+r" (addr) : "r" (salt) : "x16", "x17");
++  return addr;
++}
++#endif
++
+ /* Do AArch64 private extraction on ADDR_WORD based on context info CONTEXT and
+    unwind frame info FS.  If ADDR_WORD is signed, we do address authentication
+    on it using CFA of current frame.  */
+@@ -57,7 +74,7 @@
+ 			      _Unwind_FrameState *fs,
+ 			      _Unwind_Word addr_word)
+ {
+-  void *addr = (void *)addr_word;
++  void *addr = (void *) (_Unwind_Ptr) addr_word;
+   const int reg = DWARF_REGNUM_AARCH64_RA_STATE;
+ 
+   if (fs->regs.how[reg] == REG_UNSAVED)
+@@ -69,15 +86,24 @@
+   if (fs->regs.how[reg] == REG_UNSAVED_ARCHEXT
+       || (_Unwind_GetGR (context, reg) & 0x1) != 0)
+     {
+-      _Unwind_Word salt = (_Unwind_Word) context->cfa;
++      /* Through _Unwind_Ptr: GCC sign-extends a pointer converted to a
++	 wider integer, and an ILP32 stack is just below 4 GiB.  */
++      _Unwind_Word salt = (_Unwind_Word) (_Unwind_Ptr) context->cfa;
++#ifdef __ILP32__
++      return (void *) (_Unwind_Ptr)
++	aarch64_ilp32_authenticate (addr_word, salt,
++				    aarch64_cie_signed_with_b_key (context));
++#else
+       if (aarch64_cie_signed_with_b_key (context) != 0)
+ 	return __builtin_aarch64_autib1716 (addr, salt);
+       return __builtin_aarch64_autia1716 (addr, salt);
++#endif
+     }
+ 
+   return addr;
+ }
+ 
++#ifndef __ILP32__
+ /* SME runtime function local to libgcc, streaming compatible
+    and preserves more registers than the base PCS requires, but
+    we don't rely on that here.  */
+@@ -93,5 +119,6 @@
+       __libgcc_arm_za_disable ();			\
+     }							\
+   while (0)
++#endif /* !__ILP32__ */
+ 
+-#endif /* defined AARCH64_UNWIND_H && defined __ILP32__ */
++#endif /* defined AARCH64_UNWIND_H */
+--- a/libgcc/unwind-dw2-execute_cfa.h
++++ b/libgcc/unwind-dw2-execute_cfa.h
+@@ -276,7 +276,7 @@
+ 	  break;
+ 
+ 	case DW_CFA_GNU_window_save:
+-#if defined (__aarch64__) && !defined (__ILP32__)
++#if defined (__aarch64__)
+ 	  /* This CFA is multiplexed with Sparc.  On AArch64 it's used to toggle
+ 	     return address signing status.  REG_UNSAVED/REG_UNSAVED_ARCHEXT
+ 	     mean RA signing is disabled/enabled.  */

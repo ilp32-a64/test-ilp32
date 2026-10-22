@@ -1,6 +1,7 @@
 #!/bin/bash
 # AArch64 ILP32 glibc cross toolchain: autoconf 2.72 (to regenerate glibc's configure), binutils 2.44 and
-# GCC 14.3.0 (the GNU releases, no other patches), and the kernel headers of an ILP32 kernel tree.
+# GCC 14.3.0 (the GNU releases; GCC with the ILP32 fixes in patches/gcc-14.3.0/), and the kernel headers
+# of an ILP32 kernel tree.
 #   stage 1 (default): GCC C only, no C library; glibc (../build-glibc.sh) is built with it
 #   stage 2 (STAGE=2, after glibc is installed in the sysroot): GCC C and C++, libgcc_s, libstdc++
 #
@@ -74,6 +75,11 @@ do_sources() {
 	tar -C "$SRC" -xf "$SRC/$BINUTILS.tar.xz"
 	tar -C "$SRC" -xf "$SRC/$GCC.tar.xz"
 	cd "$SRC/$GCC"
+	for p in "$R"/patches/$GCC/*.patch; do
+		[ -e "$p" ] || continue
+		echo "patch $(basename "$p")"
+		patch -p1 < "$p"
+	done
 	./contrib/download_prerequisites
 }
 

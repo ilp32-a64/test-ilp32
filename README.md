@@ -18,7 +18,7 @@ and power off.
 | `kernel/` | kernel build test (`build.sh`), AArch32 on/off check (`verify.sh`), vDSO relocation check test (`test-vdso-check.sh`), paths (`env.sh`) |
 | `run-all.sh` | everything for one or more kernel branches |
 | `musl/` | musl 1.2.5 for AArch64 ILP32 (`ilp32-a64/musl-ilp32`, branch `ilp32-1.2.5`): cross toolchain `aarch64-linux-musl_ilp32` with the versions and patches of OpenWrt 25.12 (`toolchain/`), QEMU tests and libc-test (`test/`) |
-| `glibc/` | glibc 2.41 for AArch64 ILP32 (`ilp32-a64/glibc-ilp32`, branch `ilp32-2.41`, 64-bit `time_t`): cross toolchain `aarch64-linux-gnu_ilp32` with plain GCC 14.3.0 and binutils 2.44 (`toolchain/`), `build-glibc.sh`, `rebuild-all.sh`, LP64 regression check (`lp64-check.sh`), QEMU tests (`test/`) |
+| `glibc/` | glibc 2.41 for AArch64 ILP32 (`ilp32-a64/glibc-ilp32`, branch `ilp32-2.41`, 64-bit `time_t`): cross toolchain `aarch64-linux-gnu_ilp32` with GCC 14.3.0 and binutils 2.44 (`toolchain/`; GCC with the ILP32 fixes in `toolchain/patches/`), `build-glibc.sh`, `rebuild-all.sh`, LP64 regression check (`lp64-check.sh`), QEMU tests (`test/`) |
 | `qemu/notime32-init.c` | `/init` for `NOTIME32=1` test runs (see below) |
 
 ## Tests
