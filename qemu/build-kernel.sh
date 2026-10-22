@@ -24,7 +24,8 @@ $S/scripts/config --file $O/.config \
 $M -s olddefconfig 2>&1 | tee $O/olddefconfig.log
 grep -q "unmet direct dependencies" $O/olddefconfig.log && { echo "Kconfig: unmet dependencies"; exit 1; }
 # COMPAT_32BIT_TIME: defconfig has COMPAT off, so its default (y with COMPAT) is not applied by itself;
-# ILP32 glibc 2.30 has a 32-bit time_t and needs the time32 system calls (clock_gettime, futex, ...)
+# it keeps the time32 system calls of the ILP32 table (binaries built with a 32-bit time_t; syscall-test
+# calls the time32 clock_gettime on purpose). glibc 2.41 has a 64-bit time_t and does not use them.
 for o in COMPAT ARM64_ILP32 COMPAT_32BIT_TIME BLK_DEV_INITRD DEVTMPFS SERIAL_AMBA_PL011_CONSOLE; do
 	grep -q "^CONFIG_$o=y" $O/.config || { echo "CONFIG_$o is not y"; exit 1; }
 done

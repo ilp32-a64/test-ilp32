@@ -23,7 +23,8 @@ echo "==> $BR ($MODE) at $(git -C $WT log -1 --format='%h %s')"
 echo "==> compiler: $(${CROSS_COMPILE}gcc --version | head -1)"
 
 $M -s defconfig
-# ARM64_ILP32 depends on COMPAT and !ARM64_PTR_AUTH (pointer authentication is not supported with ILP32)
+# ARM64_ILP32 depends on COMPAT, and before ilp32-6.12.y also on !ARM64_PTR_AUTH; pointer authentication
+# is off for all branches so that they are built the same way
 $WT/scripts/config --file $OUT/.config "${CFG[@]}"
 $M -s olddefconfig 2>&1 | tee $OUT/olddefconfig.log
 grep -q "unmet direct dependencies" $OUT/olddefconfig.log && { echo "ERROR: Kconfig: unmet dependencies"; exit 1; }
