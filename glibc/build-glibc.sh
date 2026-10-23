@@ -34,11 +34,19 @@ run() { # <step> <function>
 	if [ $rc -ne 0 ]; then echo "FAILED: $1, see $LOGS/$1.log"; tail -40 "$LOGS/$1.log"; exit 1; fi
 }
 
+# CFLAGS: the usual -O2 -g, with the build machine's paths mapped (__FILE__, assert, debug info). glibc
+# gives the assembler only the -g and -fdebug-prefix-map options of CFLAGS, so the maps are given both
+# ways.
+GLIBC_CFLAGS="-O2 -g"
+for m in "$GLIBC_SRC=/usr/src/glibc-2.41" "$B=/usr/src/glibc-2.41/build" "$TC=/usr" "$SYSROOT="; do
+	GLIBC_CFLAGS="$GLIBC_CFLAGS -ffile-prefix-map=$m -fdebug-prefix-map=$m"
+done
 do_configure() {
 	echo "glibc $GLIBC_SRC $(git -C "$GLIBC_SRC" log -1 --format='%h %s')"
 	rm -rf "$B"; mkdir -p "$B"; cd "$B"
 	"$GLIBC_SRC/configure" --host=$T --build="$(gcc -dumpmachine)" --prefix=/usr \
-		--with-headers="$SYSROOT/usr/include" CC="$T-gcc" CXX=false
+		--with-headers="$SYSROOT/usr/include" CC="$T-gcc" CXX=false \
+		CFLAGS="$GLIBC_CFLAGS"
 	grep -E '^(config-machine|default-abi|slibdir|rtlddir|libdir|build-mathvec) ' config.make
 	grep '^config-sysdirs' config.make | tr ' ' '\n' | grep sysdeps
 }

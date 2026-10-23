@@ -92,13 +92,22 @@ do_binutils() {
 	make install
 }
 
+# Target libraries (libgcc, libstdc++, libgomp, ...): GCC's default -g -O2, with the build machine's
+# paths mapped (__FILE__, debug info), so that no build path ends up in the libraries. The maps are
+# also given as -fdebug-prefix-map, which GCC passes on to the assembler for .S files.
+TARGET_FLAGS="-g -O2"
+for m in "$SRC/$GCC=/usr/src/$GCC" "$B=/usr/src/$GCC/build" "$PREFIX=/usr" "$SYSROOT="; do
+	TARGET_FLAGS="$TARGET_FLAGS -ffile-prefix-map=$m -fdebug-prefix-map=$m"
+done
+
 do_gcc1() {
 	rm -rf "$B/gcc1"; mkdir -p "$B/gcc1"; cd "$B/gcc1"
 	"$SRC/$GCC/configure" --target=$T --prefix="$PREFIX" --with-sysroot="$SYSROOT" \
 		--with-abi=ilp32 --with-multilib-list=ilp32 --disable-multilib --disable-nls --disable-werror \
 		--enable-default-pie --enable-languages=c --without-headers --with-newlib --disable-shared --disable-threads \
 		--disable-libatomic --disable-libgomp --disable-libquadmath --disable-libssp \
-		--disable-libsanitizer --disable-libvtv --disable-libstdcxx --disable-decimal-float
+		--disable-libsanitizer --disable-libvtv --disable-libstdcxx --disable-decimal-float \
+		CFLAGS_FOR_TARGET="$TARGET_FLAGS" CXXFLAGS_FOR_TARGET="$TARGET_FLAGS"
 	make -j"$J" all-gcc all-target-libgcc
 	make install-gcc install-target-libgcc
 }
@@ -113,7 +122,8 @@ do_kheaders() {
 do_gcc2() {
 	test -f "$SYSROOT/libilp32/libc.so.6" || { echo "glibc is not installed in $SYSROOT"; return 1; }
 	rm -rf "$B/gcc2"; mkdir -p "$B/gcc2"; cd "$B/gcc2"
-	"$SRC/$GCC/configure" --target=$T --prefix="$PREFIX" --with-sysroot="$SYSROOT" 		--with-abi=ilp32 --with-multilib-list=ilp32 --disable-multilib --disable-nls --disable-werror 		--enable-default-pie --enable-languages=c,c++ --enable-shared --enable-threads=posix --enable-__cxa_atexit 		--disable-libsanitizer --disable-libssp --disable-libvtv --disable-decimal-float
+	"$SRC/$GCC/configure" --target=$T --prefix="$PREFIX" --with-sysroot="$SYSROOT" 		--with-abi=ilp32 --with-multilib-list=ilp32 --disable-multilib --disable-nls --disable-werror 		--enable-default-pie --enable-languages=c,c++ --enable-shared --enable-threads=posix --enable-__cxa_atexit 		--disable-libsanitizer --disable-libssp --disable-libvtv --disable-decimal-float \
+		CFLAGS_FOR_TARGET="$TARGET_FLAGS" CXXFLAGS_FOR_TARGET="$TARGET_FLAGS"
 	make -j"$J"
 	make install
 }
