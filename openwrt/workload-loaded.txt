@@ -1,0 +1,15 @@
+# Loaded state for openwrt-memory.py --workload: one shell command per line, run in order after procd's
+# "init complete", then the usual settle time and measurement. User-space heavy parts first.
+# Each command must stay below the 512-character line limit of the busybox shell.
+#
+# 200 firewall4 rules and 50 static DHCP leases (mostly kernel memory: nftables; dnsmasq holds the leases)
+awk 'BEGIN { for (i = 0; i < 200; i++) { print "add firewall rule"; printf "set firewall.@rule[-1].name=blk%d\n", i; print "set firewall.@rule[-1].src=wan"; printf "set firewall.@rule[-1].src_ip=10.%d.%d.0/24\n", int(i / 250), i % 250; print "set firewall.@rule[-1].target=DROP" } print "commit firewall" }' | uci batch
+awk 'BEGIN { for (i = 0; i < 50; i++) { print "add dhcp host"; printf "set dhcp.@host[-1].name=h%d\n", i; printf "set dhcp.@host[-1].mac=02:00:00:00:%02x:%02x\n", int(i / 256), i % 256; printf "set dhcp.@host[-1].ip=192.168.1.%d\n", 100 + i } print "commit dhcp" }' | uci batch; uci show dhcp | grep -c "=host"
+fw4 reload > /dev/null 2>&1; nft list ruleset | grep -c "10\.0\."
+# dnsmasq with a 150000-domain blocklist (adblock style address=/domain/)
+D=$(ls -d /tmp/dnsmasq*.d | head -1); awk 'BEGIN { for (i = 0; i < 150000; i++) printf "address=/blk%06d.example.org/\n", i }' > $D/blocklist.conf; wc -l $D/blocklist.conf
+/etc/init.d/dnsmasq restart; sleep 30; pidof dnsmasq; nslookup blk012345.example.org 127.0.0.1 2>&1 | tail -2
+# LuCI: log in 5 times (rpcd sessions) and render the login page and a few views through uhttpd/ucode
+for i in 1 2 3 4 5; do wget -q -O /dev/null --post-data 'luci_username=root&luci_password=' http://127.0.0.1/cgi-bin/luci/; done; for p in "" admin/status/overview admin/network/network admin/system/system; do wget -q -O /dev/null http://127.0.0.1/cgi-bin/luci/$p; done; ubus call session list | grep -c ubus_rpc_session
+# python3 holding a dict of 100000 entries (measured as the python3 process)
+(python3 -c 'import time; d = {("k%d" % i): i for i in range(100000)}; time.sleep(100000)' > /dev/null 2>&1 &); sleep 30; pidof python3
