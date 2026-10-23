@@ -96,7 +96,7 @@ do_gcc1() {
 	rm -rf "$B/gcc1"; mkdir -p "$B/gcc1"; cd "$B/gcc1"
 	"$SRC/$GCC/configure" --target=$T --prefix="$PREFIX" --with-sysroot="$SYSROOT" \
 		--with-abi=ilp32 --with-multilib-list=ilp32 --disable-multilib --disable-nls --disable-werror \
-		--enable-languages=c --without-headers --with-newlib --disable-shared --disable-threads \
+		--enable-default-pie --enable-languages=c --without-headers --with-newlib --disable-shared --disable-threads \
 		--disable-libatomic --disable-libgomp --disable-libquadmath --disable-libssp \
 		--disable-libsanitizer --disable-libvtv --disable-libstdcxx --disable-decimal-float
 	make -j"$J" all-gcc all-target-libgcc
@@ -113,7 +113,7 @@ do_kheaders() {
 do_gcc2() {
 	test -f "$SYSROOT/libilp32/libc.so.6" || { echo "glibc is not installed in $SYSROOT"; return 1; }
 	rm -rf "$B/gcc2"; mkdir -p "$B/gcc2"; cd "$B/gcc2"
-	"$SRC/$GCC/configure" --target=$T --prefix="$PREFIX" --with-sysroot="$SYSROOT" 		--with-abi=ilp32 --with-multilib-list=ilp32 --disable-multilib --disable-nls --disable-werror 		--enable-languages=c,c++ --enable-shared --enable-threads=posix --enable-__cxa_atexit 		--disable-libsanitizer --disable-libssp --disable-libvtv --disable-decimal-float
+	"$SRC/$GCC/configure" --target=$T --prefix="$PREFIX" --with-sysroot="$SYSROOT" 		--with-abi=ilp32 --with-multilib-list=ilp32 --disable-multilib --disable-nls --disable-werror 		--enable-default-pie --enable-languages=c,c++ --enable-shared --enable-threads=posix --enable-__cxa_atexit 		--disable-libsanitizer --disable-libssp --disable-libvtv --disable-decimal-float
 	make -j"$J"
 	make install
 }
