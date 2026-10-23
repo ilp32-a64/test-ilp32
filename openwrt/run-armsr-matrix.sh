@@ -4,6 +4,7 @@
 # on to run-openwrt-qemu.sh. Exit code: number of runs with failed checks (0 = all passed).
 H=$(cd "$(dirname "$0")" && pwd)
 OUTBASE=${OUTBASE:-$H}
+mkdir -p "$OUTBASE"
 failed=0
 for cpu in cortex-a53 max; do
 	for nt in 0 1; do

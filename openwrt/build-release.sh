@@ -28,9 +28,19 @@ cd "$TREE"
 UP=$(cat version)
 BASE=$(git log -1 --format=%H -- version)
 [ -n "$BASE" ] || { echo "no history back to the upstream release commit (fetch more depth)" >&2; exit 1; }
+# no tags needed, but in a shallow clone the boundary commit looks as if it had added every file
+SHALLOW=$(git rev-parse --git-path shallow)
+if [ -f "$SHALLOW" ] && grep -qx "$BASE" "$SHALLOW"; then
+	echo "the upstream release commit is beyond the shallow history (fetch more depth)" >&2; exit 1
+fi
 N=$(git rev-list --count "$BASE"..HEAD)
 CODE=${UP%%-*}+$N-$(git rev-parse --short=10 HEAD)
+UPHASH=${UP##*-}
 log "version $VERSION, code $CODE (upstream $UP, base $(git rev-parse --short=10 "$BASE"))"
+# REVISION (scripts/getver.sh, from the version file) is DISTRIB_REVISION, os-release BUILD_ID, the base-files
+# package version and version.buildinfo: give it our code too, not the upstream one; restored at exit
+echo "$CODE" > version
+trap 'git -C "$TREE" checkout -q -- version' EXIT
 
 log "feeds (pinned by feeds.conf.default)"
 ./scripts/feeds update -a > "$OUT/feeds.log" 2>&1
@@ -107,6 +117,9 @@ PAT='ubuntu-VirtualBox|ubuntu@|/home/|runner@|fv-az|liviyifan@gmail|(^|[^0-9.])(
 bad=0
 grep -nE "$PAT" "$P" && bad=1
 grep -rlE 'ubuntu-VirtualBox|/home/ubuntu|/home/runner|runner@fv-az|liviyifan@gmail' "$ROOT" 2> /dev/null && bad=1
+# the upstream revision must not be shown as ours
+grep -nF "$UPHASH" "$P" && bad=1
+grep -rlF "$UPHASH" "$ROOT" "$R" 2> /dev/null && bad=1
 if [ -n "${EXTRA_PATTERNS:-}" ]; then
 	grep -nEf "$EXTRA_PATTERNS" "$P" && bad=1
 	grep -rlEf "$EXTRA_PATTERNS" "$ROOT" "$R" 2> /dev/null && bad=1
