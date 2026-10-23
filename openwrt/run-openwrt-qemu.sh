@@ -18,7 +18,9 @@ ILP32_TEST=$(dirname "$HERE")
 NOTIME32=${NOTIME32:-0}
 OUT=${OUT:-$HERE/out$([ "$NOTIME32" = 1 ] && echo -notime32 || true)}
 
-KERNEL=$(ls "$OPENWRT"/bin/targets/armsr/armv8/openwrt-armsr-armv8-generic-initramfs-kernel.bin)
+# ILP32 images are in armv8-ilp32 (rules.mk BIN_DIR suffix); older trees used armv8
+KERNEL=$(ls "$OPENWRT"/bin/targets/armsr/armv8-ilp32/openwrt-armsr-armv8-generic-initramfs-kernel.bin 2>/dev/null ||
+	ls "$OPENWRT"/bin/targets/armsr/armv8/openwrt-armsr-armv8-generic-initramfs-kernel.bin)
 TC=$(ls -d "$OPENWRT"/staging_dir/toolchain-aarch64_generic_ilp32_gcc-*_musl | head -1)
 T=aarch64-openwrt-linux-musl_ilp32
 export STAGING_DIR=$OPENWRT/staging_dir
