@@ -1,23 +1,40 @@
 #!/bin/bash
-# Build an OpenWrt-ILP32 release for armsr/armv8 from a checked-out openwrt-ilp32 tree: feeds as pinned by
-# the tree, toolchain from scratch, release/armsr-armv8.config, version strings, no package feed. Collects
-# the release files, the test programs for the QEMU checks, and checks the public files for build host
-# details. Used by the release workflow of openwrt-ilp32 and on a local machine.
+# Build an OpenWrt-ILP32 release for one target from a checked-out openwrt-ilp32 tree: feeds as pinned by
+# the tree, toolchain from scratch, release/<target>.config, version strings, no package feed. Collects
+# the release files (and for armsr-armv8 the test programs for the QEMU checks), and checks the public files
+# for build host details. Used by the release workflow of openwrt-ilp32 and on a local machine.
 #
-# Usage: build-release.sh <openwrt tree> <version> <output directory>
+# Usage: build-release.sh <openwrt tree> <version> <output directory> [<target>]
 #   version: e.g. 25.12.6-ilp32.1 (CONFIG_VERSION_NUMBER; the tag is v<version>)
+#   target:  armsr-armv8 (default) or mediatek-filogic, the name of the seed in release/
 # Environment: JOBS (default: nproc), EXTRA_PATTERNS (file with more extended regexps that must not appear
 #              in the public files, one per line; kept out of the repository)
-# Output: <out>/release/ (images, sha256sums, *.buildinfo, manifest, public-info.txt),
-#         <out>/tests/ (extra.cpio, extra-notime32.cpio for run-openwrt-qemu.sh PREBUILT)
+# Output: <out>/release/ (images, manifests, <target>-*.buildinfo, <target>-public-info.txt,
+#         sha256sums-<target>), <out>/tests/ (armsr-armv8 only: extra.cpio, extra-notime32.cpio for
+#         run-openwrt-qemu.sh PREBUILT)
 set -euo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
-TREE=$(cd "${1:?usage: build-release.sh <openwrt tree> <version> <out>}" && pwd)
+TREE=$(cd "${1:?usage: build-release.sh <openwrt tree> <version> <out> [<target>]}" && pwd)
 VERSION=${2:?version}
 mkdir -p "${3:?out}"; OUT=$(cd "$3" && pwd)
+TARGET=${4:-armsr-armv8}
 JOBS=${JOBS:-$(nproc)}
-SEED=$HERE/release/armsr-armv8.config
+SEED=$HERE/release/$TARGET.config
+[ -f "$SEED" ] || { echo "no seed $SEED" >&2; exit 1; }
 log() { echo "== $(date -u +%H:%M:%S) $*"; }
+
+# the release files of each target, as globs in bin/targets/<board>/<subtarget>-ilp32
+case $TARGET in
+armsr-armv8)
+	BOARD=armsr SUBTARGET=armv8
+	FILES='*-initramfs-kernel.bin *-combined-efi.img.gz' ;;
+mediatek-filogic)
+	# the devices of the seed (CONFIG_TARGET_DEVICE_..._DEVICE_<name>=y): their images and boot loaders
+	BOARD=mediatek SUBTARGET=filogic
+	DEVICES=$(sed -n 's/^CONFIG_TARGET_DEVICE_mediatek_filogic_DEVICE_\(.*\)=y$/\1/p' "$SEED")
+	FILES=$(for d in $DEVICES; do echo "*-$d-*"; done) ;;
+*) echo "unknown target: $TARGET" >&2; exit 1 ;;
+esac
 
 case $VERSION in *[!0-9A-Za-z.+-]* | "") echo "bad version: $VERSION" >&2; exit 1 ;; esac
 cd "$TREE"
@@ -36,7 +53,7 @@ fi
 N=$(git rev-list --count "$BASE"..HEAD)
 CODE=${UP%%-*}+$N-$(git rev-parse --short=10 HEAD)
 UPHASH=${UP##*-}
-log "version $VERSION, code $CODE (upstream $UP, base $(git rev-parse --short=10 "$BASE"))"
+log "$TARGET, version $VERSION, code $CODE (upstream $UP, base $(git rev-parse --short=10 "$BASE"))"
 # REVISION (scripts/getver.sh, from the version file) is DISTRIB_REVISION, os-release BUILD_ID, the base-files
 # package version and version.buildinfo: give it our code too, not the upstream one; restored at exit
 echo "$CODE" > version
@@ -60,7 +77,7 @@ done < <(grep -E '^CONFIG_|^# CONFIG_.* is not set' "$SEED"; echo "CONFIG_VERSIO
 mkdir -p files/etc/apk/repositories.d
 cat > files/etc/apk/repositories.d/distfeeds.list <<EOF
 # OpenWrt-ILP32 has no package feed: the official OpenWrt packages are not built for ILP32
-# (aarch64_generic_ilp32). Build packages from source: https://github.com/ilp32-a64/openwrt-ilp32
+# (aarch64_*_ilp32). Build packages from source: https://github.com/ilp32-a64/openwrt-ilp32
 EOF
 
 # the version strings and the kernel build user/host do not make OpenWrt rebuild what an earlier build of the
@@ -77,28 +94,32 @@ if ! make -j"$JOBS" > "$OUT/build.log" 2>&1; then
 	tail -60 "$OUT/build-failed.log"; exit 1
 fi
 
-BIN=bin/targets/armsr/armv8-ilp32
+BIN=bin/targets/$BOARD/$SUBTARGET-ilp32
 R=$OUT/release
 mkdir -p "$R"
 log "collect"
-cp "$BIN"/*-initramfs-kernel.bin "$BIN"/*-combined-efi.img.gz "$BIN"/*.manifest \
-	"$BIN"/config.buildinfo "$BIN"/feeds.buildinfo "$BIN"/version.buildinfo "$R/"
-(cd "$R" && sha256sum -- *.bin *.img.gz *.manifest *.buildinfo > sha256sums)
-
-log "test programs"
-for nt in 0 1; do
-	OPENWRT=$TREE BUILD_ONLY=1 NOTIME32=$nt OUT="$OUT/tests/build-$nt" "$HERE/run-openwrt-qemu.sh"
+# every device must have its images (OpenWrt skips a device whose image does not fit, without failing)
+for d in ${DEVICES:-}; do
+	ls "$BIN"/*-"$d"-squashfs-sysupgrade.* > /dev/null 2>&1 || { echo "no sysupgrade image for $d" >&2; exit 1; }
 done
-cp "$OUT/tests/build-0/extra.cpio" "$OUT/tests/extra.cpio"
-cp "$OUT/tests/build-1/extra.cpio" "$OUT/tests/extra-notime32.cpio"
+(cd "$BIN" && cp $FILES *.manifest "$R/")
+for f in config feeds version; do cp "$BIN/$f.buildinfo" "$R/$TARGET-$f.buildinfo"; done
+(cd "$R" && ls | grep -v -e '^sha256sums' -e 'public-info' | xargs sha256sum -- > "sha256sums-$TARGET")
+
+if [ "$TARGET" = armsr-armv8 ]; then
+	log "test programs"
+	for nt in 0 1; do
+		OPENWRT=$TREE BUILD_ONLY=1 NOTIME32=$nt OUT="$OUT/tests/build-$nt" "$HERE/run-openwrt-qemu.sh"
+	done
+	cp "$OUT/tests/build-0/extra.cpio" "$OUT/tests/extra.cpio"
+	cp "$OUT/tests/build-1/extra.cpio" "$OUT/tests/extra-notime32.cpio"
+fi
 
 log "public information"
-P=$R/public-info.txt
-ROOT=$OUT/rootfs; mkdir -p "$ROOT"
-# the file names carry the version (CONFIG_VERSION_FILENAMES): openwrt-<version>-armsr-armv8-...
-ROOTFS=$(ls "$BIN"/*-armsr-armv8-rootfs.cpio.gz)
-KIMAGE=$(ls "$BIN"/*-armsr-armv8-generic-kernel.bin)
-zcat "$ROOTFS" | (cd "$ROOT" && cpio -id --quiet 2> /dev/null) || true
+P=$R/$TARGET-public-info.txt
+# the root file system as it went into the images, and the kernel the images boot
+ROOT=$(ls -d build_dir/target-*_ilp32_musl/root-$BOARD)
+KIMAGE=$(ls build_dir/target-*_ilp32_musl/linux-${BOARD}_$SUBTARGET/linux-*/vmlinux)
 {
 	for f in etc/banner etc/openwrt_release etc/openwrt_version usr/lib/os-release \
 		etc/apk/repositories.d/distfeeds.list; do
@@ -108,7 +129,7 @@ zcat "$ROOTFS" | (cd "$ROOT" && cpio -id --quiet 2> /dev/null) || true
 	echo "### kernel version string (uname -a, compiler)"
 	# awk reads all of it: an early exit (grep -m1) would kill strings with SIGPIPE under pipefail
 	strings "$KIMAGE" | awk '/^Linux version/ && !p { print; p = 1 }'
-	for f in config.buildinfo feeds.buildinfo version.buildinfo; do echo "### $f"; cat "$R/$f"; done
+	for f in config feeds version; do echo "### $TARGET-$f.buildinfo"; cat "$R/$TARGET-$f.buildinfo"; done
 } > "$P"
 cat "$P"
 # build host details that must not be published: VM and runner user/host names, home directories, private
@@ -126,4 +147,4 @@ if [ -n "${EXTRA_PATTERNS:-}" ]; then
 fi
 [ $bad = 0 ] || { echo "public information check FAILED" >&2; exit 1; }
 log "public information check passed"
-ls -l "$R" "$OUT/tests"
+ls -l "$R"
