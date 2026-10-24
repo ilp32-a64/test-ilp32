@@ -38,9 +38,13 @@ log() { printf '\033[1;32m==> %s\033[0m\n' "$*"; }
 step() { # <name> <function>: run once, output to logs/<name>.log
 	if [ -f "$B/.$1" ]; then log "$1: done before, skipped"; return; fi
 	log "$1 ($(date +%H:%M))"
-	# set -e is ignored inside a condition, so run the step in a subshell with -e and check its status
-	local rc=0
-	( set -e; "$2" ) > "$LOGS/$1.log" 2>&1 || rc=$?
+	# set -e does not work in a subshell that is part of a condition, also not left of ||, so run it
+	# as a plain command with errexit off here and check its status
+	local rc
+	set +e
+	( set -e; "$2" ) > "$LOGS/$1.log" 2>&1
+	rc=$?
+	set -e
 	if [ $rc -ne 0 ]; then echo "FAILED: $1, see $LOGS/$1.log"; tail -30 "$LOGS/$1.log"; exit 1; fi
 	touch "$B/.$1"
 }
