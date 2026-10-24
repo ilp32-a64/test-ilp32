@@ -6,7 +6,7 @@
 #
 # Usage: build-release.sh <openwrt tree> <version> <output directory> [<target>]
 #   version: e.g. 25.12.6-ilp32.1 (CONFIG_VERSION_NUMBER; the tag is v<version>)
-#   target:  armsr-armv8 (default) or mediatek-filogic, the name of the seed in release/
+#   target:  armsr-armv8 (default), mediatek-filogic, bcm27xx-bcm2710/2711/2712: the seed in release/
 # Environment: JOBS (default: nproc), EXTRA_PATTERNS (file with more extended regexps that must not appear
 #              in the public files, one per line; kept out of the repository)
 # Output: <out>/release/ (images, manifests, <target>-*.buildinfo, <target>-public-info.txt,
@@ -33,6 +33,15 @@ mediatek-filogic)
 	BOARD=mediatek SUBTARGET=filogic
 	DEVICES=$(sed -n 's/^CONFIG_TARGET_DEVICE_mediatek_filogic_DEVICE_\(.*\)=y$/\1/p' "$SEED")
 	FILES=$(for d in $DEVICES; do echo "*-$d-*"; done) ;;
+bcm27xx-bcm2710)
+	BOARD=bcm27xx SUBTARGET=bcm2710
+	FILES='*-rpi-3-*' ;;
+bcm27xx-bcm2711)
+	BOARD=bcm27xx SUBTARGET=bcm2711
+	FILES='*-rpi-4-*' ;;
+bcm27xx-bcm2712)
+	BOARD=bcm27xx SUBTARGET=bcm2712
+	FILES='*-rpi-5-*' ;;
 *) echo "unknown target: $TARGET" >&2; exit 1 ;;
 esac
 
