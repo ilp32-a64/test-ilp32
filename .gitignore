@@ -6,5 +6,6 @@
 # built test programs, QEMU kernels, initramfs, console logs
 /tests/out/
 /qemu/out/
+/pac/out/
 /openwrt/out*/
 *.log

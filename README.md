@@ -22,6 +22,7 @@ initramfs, run the test programs and power off.
 | `musl/` | musl 1.2.5 for AArch64 ILP32 (`ilp32-a64/musl-ilp32`, branch `ilp32-1.2.5`): cross toolchain `aarch64-linux-musl_ilp32` with the versions and patches of OpenWrt 25.12 (`toolchain/`), QEMU tests and libc-test (`test/`) |
 | `glibc/` | glibc 2.41 for AArch64 ILP32 (`ilp32-a64/glibc-ilp32`, branch `ilp32-2.41`, 64-bit `time_t`): cross toolchain `aarch64-linux-gnu_ilp32` with GCC 14.3.0 and binutils 2.44 (`toolchain/`; GCC with the ILP32 fixes in `toolchain/patches/`), `build-glibc.sh`, `rebuild-all.sh`, LP64 regression check (`lp64-check.sh`), QEMU tests (`test/`) |
 | `qemu/notime32-init.c` | `/init` for `NOTIME32=1` test runs (see below) |
+| `pac/` | pointer authentication (PAC), BTI, SVE and SME tests, ILP32 next to LP64 (`build.sh` adds them to the `qemu/` initramfs, `run.sh` boots a kernel with `ARM64_PTR_AUTH` on QEMU `-cpu max`; see below) |
 | `openwrt/` | QEMU tests of an OpenWrt armsr/armv8 ILP32 image (`ilp32-a64/openwrt-ilp32`, branch `ilp32-25.12`) |
 
 ## Tests
@@ -32,6 +33,19 @@ initramfs, run the test programs and power off.
 | `glibc-test-ilp32` | ILP32, glibc 2.41 | type sizes, malloc, threads, `clock_gettime` through the vDSO compared with the system call (speed and time over a 200 ms sleep), signal handler and return, fork, stat, dlopen |
 | `cxx-test-ilp32` | ILP32, libstdc++ (GCC 14.3.0) | STL, exceptions through 50 frames, `std::thread` |
 | `aarch32-test` | AArch32 (armhf), static | data model, uname (`aarch64`, `armv8l` with `PER_LINUX32`), time, signals, fork, mmap; on a kernel without `AARCH32_EL0` it must be refused with `ENOEXEC` |
+
+`pac/` adds these (all static; they need a CPU with PAC, BTI and SVE, QEMU `-cpu max`):
+
+| Program | ABI | Checks |
+|---|---|---|
+| `pac-clang-ilp32` | ILP32, clang 22 (`ilp32-a64/llvm-ilp32`) `-mbranch-protection=pac-ret` | `AT_HWCAP` PACA/PACG, sign and authenticate (a wrong modifier fails: `SIGILL` with FEAT_FPAC), keys kept by fork and new after exec, `PR_PAC_*` prctls, ptrace `NT_ARM_PAC_MASK`/`NT_ARM_PAC_ENABLED_KEYS`, signals and longjmp with signed return addresses |
+| `pac-gcc-ilp32`, `pac-gcc-lp64` | ILP32 GCC (no return address signing for ILP32), LP64 GCC `pac-ret` | the same |
+| `pac-cxx-*-ilp32` | ILP32, clang `pac-ret` (and without), GCC | C++ exceptions through frames with signed return addresses (the libgcc unwinder) |
+| `sve-gcc-ilp32`, `sve-gcc-lp64` | ILP32, LP64 | SVE vector length prctls, Z registers in the signal frame and after sigreturn, ptrace `NT_ARM_SVE`; SME where the kernel has it |
+| `bti-nolibc-*`, `nobti-nolibc-ilp32` | ILP32, LP64, no C library | exec of a program with a GNU property note (BTI) and of one without |
+| `btitrap-check-ilp32` | ILP32 (runs ILP32 and LP64 programs) | an indirect call to a function without a BTI landing pad: `SIGILL` with BTI |
+
+The clang programs are left out without the ILP32 clang (`CLANG`, default `~/work/build/llvm22-ilp32/bin/clang`).
 
 `/init` prints one line per program and `ILP32-TEST-RESULT: <failed> of <total> program(s) failed`.
 Timings in QEMU (TCG) are not performance numbers; they only show whether the vDSO is used.
@@ -61,6 +75,8 @@ kernel build with AArch32 and the QEMU test with AArch32 on and off. Single step
 ./kernel/build.sh ilp32-6.12.y [a32|noa32]
 ./qemu/build-kernel.sh ~/work/wt/ilp32-6.12.y ilp32-6.12.y
 ./qemu/run.sh ilp32-6.12.y         # AARCH32=0 for a kernel without AARCH32_EL0, QEMU_CPU=max for PAC/BTI/SVE
+KCONFIG_EXTRA="-e ARM64_PTR_AUTH" ./qemu/build-kernel.sh ~/work/wt/ilp32-6.12.y ilp32-6.12.y-pac
+./pac/build.sh && ./pac/run.sh ilp32-6.12.y-pac     # PAC, BTI, SVE tests on QEMU -cpu max
 ./kernel/test-vdso-check.sh ilp32-6.12.y
 ```
 
