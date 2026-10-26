@@ -132,6 +132,8 @@ if [ "$PARTS" = compiler ]; then
 	# x86-hosted toolchain's directory, after checking that every header of the board build is in it
 	(cd "$R/$GD/include" && find . -type f | while read -r f; do cmp "$f" "$TC/$GD/include/$f"; done)
 	cp -a "$TC/$GD/include" "$TC/$GD/include-fixed" "$P/usr/$GD/"
+	# not libssp's headers: libssp is not packaged (glibc provides the stack protector)
+	rm -rf "$P/usr/$GD/include/ssp"
 	for f in crtbegin.o crtbeginS.o crtbeginT.o crtend.o crtendS.o crtfastmath.o libgcc.a libgcc_eh.a libgcov.a; do
 		cp -a "$TC/$GD/$f" "$P/usr/$GD/"
 	done
@@ -245,7 +247,8 @@ manifest() {
 		echo "  prefix /usr, sysroot /, headers /$HDR, libraries /usr/libilp32, gcc in /usr/lib/gcc-cross/$T/14"
 		echo "  and /usr/libexec/gcc-cross/$T/14; only the -14 names (meta packages add the unversioned links)"
 		echo "  target files (crt*.o, libgcc*.a, libgcov.a, headers, libstdc++/libatomic/libgomp static libraries,"
-		echo "  C++ headers) are the x86-hosted toolchain's, unchanged (fixincludes' path comments rewritten)"
+		echo "  C++ headers) are the x86-hosted toolchain's, unchanged (fixincludes' path comments rewritten),"
+		echo "  without include/ssp (libssp, libitm are built but not packaged)"
 		echo "  binutils deviations: --disable-shared (static libbfd/libopcodes/libctf/libsframe, no collision"
 		echo "  with Debian's libbinutils; so no bfd-plugins/libdep.so), --disable-gprofng (not packaged);"
 		echo "  libdir /usr/lib/$T as Debian's cross binutils (ld scripts there); gcc --with-bugurl: the project's tracker"
