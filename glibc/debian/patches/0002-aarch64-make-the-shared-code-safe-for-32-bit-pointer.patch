@@ -1,0 +1,202 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: liviyifan <344781483+liviyifan@users.noreply.github.com>
+Date: Thu, 22 Oct 2026 20:24:08 +0800
+Subject: [PATCH 2/7] aarch64: make the shared code safe for 32-bit pointers
+
+Preparation for the ILP32 ABI, where pointers and unsigned long are
+32-bit. The LP64 code is unchanged (libc.so, ld.so, libm.so and
+libpthread.so disassemble the same).
+
+- dl-start.S, __arm_za_disable.S: load GL(dl_aarch64_gcs) and the GOT
+  entry of _rtld_global_ro with PTR_REG; both are pointer-sized.
+- dl-machine.h: elf_machine_type_class uses AARCH64_R, so that the
+  ELF32 relocation types are classified too (COPY, JUMP_SLOT, TLS).
+- __alloc_gcs.c, makecontext.c: convert pointers through uintptr_t.
+- bits/hwcap.h: the bits 32 and up use unsigned long long when long
+  is 32-bit.
+---
+ sysdeps/aarch64/__alloc_gcs.c                 |  2 +-
+ sysdeps/aarch64/__arm_za_disable.S            |  2 +-
+ sysdeps/aarch64/dl-machine.h                  | 12 +--
+ sysdeps/aarch64/dl-start.S                    |  5 +-
+ sysdeps/unix/sysv/linux/aarch64/bits/hwcap.h  | 75 +++++++++++--------
+ sysdeps/unix/sysv/linux/aarch64/makecontext.c |  2 +-
+ 6 files changed, 54 insertions(+), 44 deletions(-)
+
+diff --git a/sysdeps/aarch64/__alloc_gcs.c b/sysdeps/aarch64/__alloc_gcs.c
+index e70b4594a2..2426d9c904 100644
+--- a/sysdeps/aarch64/__alloc_gcs.c
++++ b/sysdeps/aarch64/__alloc_gcs.c
+@@ -53,7 +53,7 @@ __alloc_gcs (size_t stack_size, void **ss_base, size_t *ss_size)
+   gcsp--;
+   /* Verify GCS cap token.  */
+   gcsp--;
+-  if (((uint64_t)gcsp & 0xfffffffffffff000) + 1 != *gcsp)
++  if (((uintptr_t) gcsp & 0xfffffffffffff000) + 1 != *gcsp)
+     {
+       __munmap (base, size);
+       return NULL;
+diff --git a/sysdeps/aarch64/__arm_za_disable.S b/sysdeps/aarch64/__arm_za_disable.S
+index 629080372c..7552accb3e 100644
+--- a/sysdeps/aarch64/__arm_za_disable.S
++++ b/sysdeps/aarch64/__arm_za_disable.S
+@@ -36,7 +36,7 @@ ENTRY (__libc_arm_za_disable)
+ #ifdef SHARED
+ 	/* In libc.so.  */
+ 	adrp	x14, :got:_rtld_global_ro
+-	ldr	x14, [x14, :got_lo12:_rtld_global_ro]
++	ldr	PTR_REG (14), [x14, :got_lo12:_rtld_global_ro]
+ 	ldr	x14, [x14, GLRO_DL_HWCAP2_OFFSET]
+ #else
+ 	/* In libc.a, may be PIC.  */
+diff --git a/sysdeps/aarch64/dl-machine.h b/sysdeps/aarch64/dl-machine.h
+index bb8f8a9bb1..17a2591fce 100644
+--- a/sysdeps/aarch64/dl-machine.h
++++ b/sysdeps/aarch64/dl-machine.h
+@@ -111,12 +111,12 @@ elf_machine_runtime_setup (struct link_map *l, struct r_scope_elem *scope[],
+ #define RTLD_START asm (".globl _dl_start");
+ 
+ #define elf_machine_type_class(type)					\
+-  ((((type) == R_AARCH64_JUMP_SLOT ||					\
+-     (type) == R_AARCH64_TLS_DTPMOD ||					\
+-     (type) == R_AARCH64_TLS_DTPREL ||					\
+-     (type) == R_AARCH64_TLS_TPREL ||					\
+-     (type) == R_AARCH64_TLSDESC) * ELF_RTYPE_CLASS_PLT)		\
+-   | (((type) == R_AARCH64_COPY) * ELF_RTYPE_CLASS_COPY))
++  ((((type) == AARCH64_R(JUMP_SLOT) ||					\
++     (type) == AARCH64_R(TLS_DTPMOD) ||					\
++     (type) == AARCH64_R(TLS_DTPREL) ||					\
++     (type) == AARCH64_R(TLS_TPREL) ||					\
++     (type) == AARCH64_R(TLSDESC)) * ELF_RTYPE_CLASS_PLT)		\
++   | (((type) == AARCH64_R(COPY)) * ELF_RTYPE_CLASS_COPY))
+ 
+ #define ELF_MACHINE_JMP_SLOT	AARCH64_R(JUMP_SLOT)
+ 
+diff --git a/sysdeps/aarch64/dl-start.S b/sysdeps/aarch64/dl-start.S
+index a249fda21c..ed2e5ea801 100644
+--- a/sysdeps/aarch64/dl-start.S
++++ b/sysdeps/aarch64/dl-start.S
+@@ -33,10 +33,11 @@ ENTRY (_start)
+ 	/* Returns user entry point in x0.  */
+ 	mov	PTR_REG (21), PTR_REG (0)
+ 
+-	/* Use GL(dl_aarch64_gcs) to set the shadow stack status.  */
++	/* Use GL(dl_aarch64_gcs) to set the shadow stack status.  It is an
++	   unsigned long, which has the size of a pointer.  */
+ 	adrp	x16, _rtld_local
+ 	add	PTR_REG (16), PTR_REG (16), :lo12:_rtld_local
+-	ldr	x1, [x16, GL_DL_AARCH64_GCS_OFFSET]
++	ldr	PTR_REG (1), [x16, GL_DL_AARCH64_GCS_OFFSET]
+ 	cbz	x1, L(skip_gcs_enable)
+ 
+ 	/* Enable GCS before user code runs.  Note that IFUNC resolvers and
+diff --git a/sysdeps/unix/sysv/linux/aarch64/bits/hwcap.h b/sysdeps/unix/sysv/linux/aarch64/bits/hwcap.h
+index d064a091a6..de75bbd9ee 100644
+--- a/sysdeps/unix/sysv/linux/aarch64/bits/hwcap.h
++++ b/sysdeps/unix/sysv/linux/aarch64/bits/hwcap.h
+@@ -20,6 +20,15 @@
+ # error "Never include <bits/hwcap.h> directly; use <sys/auxv.h> instead."
+ #endif
+ 
++/* Bits 32 and up.  unsigned long is 32-bit for ILP32; there these bits
++   cannot be seen through getauxval, as the entries of the auxiliary
++   vector are 32-bit, but the values stay correct.  */
++#ifdef __LP64__
++# define __AARCH64_HWCAP64(n)	(1UL << (n))
++#else
++# define __AARCH64_HWCAP64(n)	(1ULL << (n))
++#endif
++
+ /* The following must match the kernel's <asm/hwcap.h> and update the
+    list together with sysdeps/unix/sysv/linux/aarch64/dl-procinfo.c.  */
+ #define HWCAP_FP		(1 << 0)
+@@ -54,7 +63,7 @@
+ #define HWCAP_SB		(1 << 29)
+ #define HWCAP_PACA		(1 << 30)
+ #define HWCAP_PACG		(1UL << 31)
+-#define HWCAP_GCS		(1UL << 32)
++#define HWCAP_GCS		__AARCH64_HWCAP64 (32)
+ 
+ #define HWCAP2_DCPODP		(1 << 0)
+ #define HWCAP2_SVE2		(1 << 1)
+@@ -88,35 +97,35 @@
+ #define HWCAP2_SME_F32F32	(1 << 29)
+ #define HWCAP2_SME_FA64		(1 << 30)
+ #define HWCAP2_WFXT		(1UL << 31)
+-#define HWCAP2_EBF16		(1UL << 32)
+-#define HWCAP2_SVE_EBF16	(1UL << 33)
+-#define HWCAP2_CSSC		(1UL << 34)
+-#define HWCAP2_RPRFM		(1UL << 35)
+-#define HWCAP2_SVE2P1		(1UL << 36)
+-#define HWCAP2_SME2		(1UL << 37)
+-#define HWCAP2_SME2P1		(1UL << 38)
+-#define HWCAP2_SME_I16I32	(1UL << 39)
+-#define HWCAP2_SME_BI32I32	(1UL << 40)
+-#define HWCAP2_SME_B16B16	(1UL << 41)
+-#define HWCAP2_SME_F16F16	(1UL << 42)
+-#define HWCAP2_MOPS		(1UL << 43)
+-#define HWCAP2_HBC		(1UL << 44)
+-#define HWCAP2_SVE_B16B16	(1UL << 45)
+-#define HWCAP2_LRCPC3		(1UL << 46)
+-#define HWCAP2_LSE128		(1UL << 47)
+-#define HWCAP2_FPMR		(1UL << 48)
+-#define HWCAP2_LUT		(1UL << 49)
+-#define HWCAP2_FAMINMAX		(1UL << 50)
+-#define HWCAP2_F8CVT		(1UL << 51)
+-#define HWCAP2_F8FMA		(1UL << 52)
+-#define HWCAP2_F8DP4		(1UL << 53)
+-#define HWCAP2_F8DP2		(1UL << 54)
+-#define HWCAP2_F8E4M3		(1UL << 55)
+-#define HWCAP2_F8E5M2		(1UL << 56)
+-#define HWCAP2_SME_LUTV2	(1UL << 57)
+-#define HWCAP2_SME_F8F16	(1UL << 58)
+-#define HWCAP2_SME_F8F32	(1UL << 59)
+-#define HWCAP2_SME_SF8FMA	(1UL << 60)
+-#define HWCAP2_SME_SF8DP4	(1UL << 61)
+-#define HWCAP2_SME_SF8DP2	(1UL << 62)
+-#define HWCAP2_POE		(1UL << 63)
++#define HWCAP2_EBF16		__AARCH64_HWCAP64 (32)
++#define HWCAP2_SVE_EBF16	__AARCH64_HWCAP64 (33)
++#define HWCAP2_CSSC		__AARCH64_HWCAP64 (34)
++#define HWCAP2_RPRFM		__AARCH64_HWCAP64 (35)
++#define HWCAP2_SVE2P1		__AARCH64_HWCAP64 (36)
++#define HWCAP2_SME2		__AARCH64_HWCAP64 (37)
++#define HWCAP2_SME2P1		__AARCH64_HWCAP64 (38)
++#define HWCAP2_SME_I16I32	__AARCH64_HWCAP64 (39)
++#define HWCAP2_SME_BI32I32	__AARCH64_HWCAP64 (40)
++#define HWCAP2_SME_B16B16	__AARCH64_HWCAP64 (41)
++#define HWCAP2_SME_F16F16	__AARCH64_HWCAP64 (42)
++#define HWCAP2_MOPS		__AARCH64_HWCAP64 (43)
++#define HWCAP2_HBC		__AARCH64_HWCAP64 (44)
++#define HWCAP2_SVE_B16B16	__AARCH64_HWCAP64 (45)
++#define HWCAP2_LRCPC3		__AARCH64_HWCAP64 (46)
++#define HWCAP2_LSE128		__AARCH64_HWCAP64 (47)
++#define HWCAP2_FPMR		__AARCH64_HWCAP64 (48)
++#define HWCAP2_LUT		__AARCH64_HWCAP64 (49)
++#define HWCAP2_FAMINMAX		__AARCH64_HWCAP64 (50)
++#define HWCAP2_F8CVT		__AARCH64_HWCAP64 (51)
++#define HWCAP2_F8FMA		__AARCH64_HWCAP64 (52)
++#define HWCAP2_F8DP4		__AARCH64_HWCAP64 (53)
++#define HWCAP2_F8DP2		__AARCH64_HWCAP64 (54)
++#define HWCAP2_F8E4M3		__AARCH64_HWCAP64 (55)
++#define HWCAP2_F8E5M2		__AARCH64_HWCAP64 (56)
++#define HWCAP2_SME_LUTV2	__AARCH64_HWCAP64 (57)
++#define HWCAP2_SME_F8F16	__AARCH64_HWCAP64 (58)
++#define HWCAP2_SME_F8F32	__AARCH64_HWCAP64 (59)
++#define HWCAP2_SME_SF8FMA	__AARCH64_HWCAP64 (60)
++#define HWCAP2_SME_SF8DP4	__AARCH64_HWCAP64 (61)
++#define HWCAP2_SME_SF8DP2	__AARCH64_HWCAP64 (62)
++#define HWCAP2_POE		__AARCH64_HWCAP64 (63)
+diff --git a/sysdeps/unix/sysv/linux/aarch64/makecontext.c b/sysdeps/unix/sysv/linux/aarch64/makecontext.c
+index a2eab9efc6..d55ea278e0 100644
+--- a/sysdeps/unix/sysv/linux/aarch64/makecontext.c
++++ b/sysdeps/unix/sysv/linux/aarch64/makecontext.c
+@@ -93,7 +93,7 @@ __makecontext (ucontext_t *ucp, void (*func) (void), int argc, ...)
+       struct { uint64_t x, gcspr, y, z; } *q = p;
+       /* TODO: this allocation remains mapped even after thread
+          that uses it exits.  */
+-      q->gcspr = (uint64_t) alloc_makecontext_gcs (ucp->uc_stack.ss_size);
++      q->gcspr = (uintptr_t) alloc_makecontext_gcs (ucp->uc_stack.ss_size);
+     }
+ 
+   va_start (ap, argc);

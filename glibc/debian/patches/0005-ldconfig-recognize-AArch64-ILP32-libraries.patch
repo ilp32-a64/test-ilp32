@@ -1,0 +1,56 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: liviyifan <344781483+liviyifan@users.noreply.github.com>
+Date: Thu, 22 Oct 2026 20:49:42 +0800
+Subject: [PATCH 5/7] ldconfig: recognize AArch64 ILP32 libraries
+
+ELF32 objects with e_machine EM_AARCH64 get FLAG_AARCH64_LIB32, shown
+as "AArch64 ILP32" by ldconfig -p.
+---
+ elf/cache.c                              | 3 +++
+ sysdeps/generic/ldconfig.h               | 1 +
+ sysdeps/unix/sysv/linux/arm/readelflib.c | 6 +++++-
+ 3 files changed, 9 insertions(+), 1 deletion(-)
+
+diff --git a/elf/cache.c b/elf/cache.c
+index 89a6a1e49a..f145ffce26 100644
+--- a/elf/cache.c
++++ b/elf/cache.c
+@@ -228,6 +228,9 @@ print_entry (const char *lib, int flag, uint64_t hwcap,
+     case FLAG_LARCH_FLOAT_ABI_DOUBLE:
+       fputs (",double-float", stdout);
+       break;
++    case FLAG_AARCH64_LIB32:
++      fputs (",AArch64 ILP32", stdout);
++      break;
+     case 0:
+       break;
+     default:
+diff --git a/sysdeps/generic/ldconfig.h b/sysdeps/generic/ldconfig.h
+index 7bc8788647..5c83c2f3e7 100644
+--- a/sysdeps/generic/ldconfig.h
++++ b/sysdeps/generic/ldconfig.h
+@@ -46,6 +46,7 @@
+ #define FLAG_RISCV_FLOAT_ABI_DOUBLE	0x1000
+ #define FLAG_LARCH_FLOAT_ABI_SOFT	0x1100
+ #define FLAG_LARCH_FLOAT_ABI_DOUBLE	0x1200
++#define FLAG_AARCH64_LIB32		0x1300
+ 
+ /* Name of auxiliary cache.  */
+ #define _PATH_LDCONFIG_AUX_CACHE "/var/cache/ldconfig/aux-cache"
+diff --git a/sysdeps/unix/sysv/linux/arm/readelflib.c b/sysdeps/unix/sysv/linux/arm/readelflib.c
+index edf6984115..68ace0fa01 100644
+--- a/sysdeps/unix/sysv/linux/arm/readelflib.c
++++ b/sysdeps/unix/sysv/linux/arm/readelflib.c
+@@ -39,7 +39,11 @@ process_elf_file (const char *file_name, const char *lib, int *flag,
+       ret = process_elf32_file (file_name, lib, flag, isa_level, soname,
+ 				file_contents, file_length);
+ 
+-      if (!ret && EF_ARM_EABI_VERSION (elf32_header->e_flags) == EF_ARM_EABI_VER5)
++      if (!ret && elf32_header->e_machine == EM_AARCH64)
++	/* AArch64 ILP32.  */
++	*flag = FLAG_AARCH64_LIB32|FLAG_ELF_LIBC6;
++      else if (!ret
++	       && EF_ARM_EABI_VERSION (elf32_header->e_flags) == EF_ARM_EABI_VER5)
+ 	{
+ 	  if (elf32_header->e_flags & EF_ARM_ABI_FLOAT_HARD)
+ 	    *flag = FLAG_ARM_LIBHF|FLAG_ELF_LIBC6;

@@ -1,0 +1,243 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: liviyifan <344781483+liviyifan@users.noreply.github.com>
+Date: Thu, 22 Oct 2026 20:36:10 +0800
+Subject: [PATCH 3/7] aarch64: select the LP64 or ILP32 ABI at configure time
+
+- preconfigure: machine is aarch64/ilp32 when the compiler defines
+  __ILP32__, else aarch64/lp64.
+- sysdeps/aarch64/Implies is replaced by lp64/Implies-after and
+  ilp32/Implies-after (wordsize-64 or wordsize-32, then the ieee754
+  directories), and the Linux aarch64 directory gets lp64 and ilp32
+  subdirectories. The LP64 sysdirs list is unchanged.
+- configure.ac: default-abi includes the ABI; libmvec is LP64 only.
+- Linux configure.ac: ILP32 needs kernel 5.10 and installs the
+  libraries in libilp32.
+- Makefile: abi-variants lp64, lp64_be, ilp32 and ilp32_be.
+
+configure regenerated with autoconf 2.72.
+---
+ sysdeps/aarch64/configure                     | 18 ++++++++++-----
+ sysdeps/aarch64/configure.ac                  | 15 +++++++++----
+ sysdeps/aarch64/ilp32/Implies-after           |  4 ++++
+ .../aarch64/{Implies => lp64/Implies-after}   |  0
+ sysdeps/aarch64/preconfigure                  |  6 ++++-
+ sysdeps/unix/sysv/linux/aarch64/Implies       |  1 -
+ sysdeps/unix/sysv/linux/aarch64/Makefile      |  8 +++++--
+ sysdeps/unix/sysv/linux/aarch64/configure     | 22 ++++++++++++++++---
+ sysdeps/unix/sysv/linux/aarch64/configure.ac  | 11 +++++++---
+ sysdeps/unix/sysv/linux/aarch64/lp64/Implies  |  2 ++
+ 10 files changed, 67 insertions(+), 20 deletions(-)
+ create mode 100644 sysdeps/aarch64/ilp32/Implies-after
+ rename sysdeps/aarch64/{Implies => lp64/Implies-after} (100%)
+ create mode 100644 sysdeps/unix/sysv/linux/aarch64/lp64/Implies
+
+diff --git a/sysdeps/aarch64/configure b/sysdeps/aarch64/configure
+index 4bd5496a4a..dc1ef02f37 100755
+--- a/sysdeps/aarch64/configure
++++ b/sysdeps/aarch64/configure
+@@ -178,12 +178,13 @@ printf "%s\n" "$libc_cv_aarch64_be" >&6; }
+ if test $libc_cv_aarch64_be = yes; then
+   printf "%s\n" "#define HAVE_AARCH64_BE 1" >>confdefs.h
+ 
+-  config_vars="$config_vars
+-default-abi = lp64_be"
++  libc_aarch64_be=_be
+ else
+-  config_vars="$config_vars
+-default-abi = lp64"
++  libc_aarch64_be=
+ fi
++# aarch64_config_abi (lp64 or ilp32) is set by preconfigure.
++config_vars="$config_vars
++default-abi = ${aarch64_config_abi}${libc_aarch64_be}"
+ 
+ # Only consider BTI supported if -mbranch-protection=bti is
+ # on by default in the compiler and the linker produces
+@@ -346,7 +347,12 @@ if test $libc_cv_aarch64_sve_asm = yes; then
+ fi
+ 
+ if test x"$build_mathvec" = xnotset; then
+-  build_mathvec=yes
++  # The vector function ABI is only defined for LP64.
++  if test $aarch64_config_abi = ilp32; then
++    build_mathvec=no
++  else
++    build_mathvec=yes
++  fi
+ fi
+ 
+ # Check if compiler supports SVE ACLE.
+@@ -396,7 +402,7 @@ printf "%s\n" "$as_me: WARNING: mathvec is enabled but compiler does not have SV
+   if test $fail = yes; then
+     as_fn_error $? "use a compatible toolchain or configure with --disable-mathvec (this results in incomplete ABI)." "$LINENO" 5
+   fi
+-else
++elif test $aarch64_config_abi != ilp32; then
+   { printf "%s\n" "$as_me:${as_lineno-$LINENO}: WARNING: mathvec is disabled, this results in incomplete ABI." >&5
+ printf "%s\n" "$as_me: WARNING: mathvec is disabled, this results in incomplete ABI." >&2;}
+ fi
+diff --git a/sysdeps/aarch64/configure.ac b/sysdeps/aarch64/configure.ac
+index 56d12d661d..f2d523e0b6 100644
+--- a/sysdeps/aarch64/configure.ac
++++ b/sysdeps/aarch64/configure.ac
+@@ -19,10 +19,12 @@ AC_CACHE_CHECK([for big endian],
+   ], libc_cv_aarch64_be=yes, libc_cv_aarch64_be=no)])
+ if test $libc_cv_aarch64_be = yes; then
+   AC_DEFINE(HAVE_AARCH64_BE)
+-  LIBC_CONFIG_VAR([default-abi], [lp64_be])
++  libc_aarch64_be=_be
+ else
+-  LIBC_CONFIG_VAR([default-abi], [lp64])
++  libc_aarch64_be=
+ fi
++# aarch64_config_abi (lp64 or ilp32) is set by preconfigure.
++LIBC_CONFIG_VAR([default-abi], [${aarch64_config_abi}${libc_aarch64_be}])
+ 
+ # Only consider BTI supported if -mbranch-protection=bti is
+ # on by default in the compiler and the linker produces
+@@ -104,7 +106,12 @@ if test $libc_cv_aarch64_sve_asm = yes; then
+ fi
+ 
+ if test x"$build_mathvec" = xnotset; then
+-  build_mathvec=yes
++  # The vector function ABI is only defined for LP64.
++  if test $aarch64_config_abi = ilp32; then
++    build_mathvec=no
++  else
++    build_mathvec=yes
++  fi
+ fi
+ 
+ # Check if compiler supports SVE ACLE.
+@@ -137,6 +144,6 @@ if test $build_mathvec = yes; then
+   if test $fail = yes; then
+     AC_MSG_ERROR([use a compatible toolchain or configure with --disable-mathvec (this results in incomplete ABI).])
+   fi
+-else
++elif test $aarch64_config_abi != ilp32; then
+   AC_MSG_WARN([mathvec is disabled, this results in incomplete ABI.])
+ fi
+diff --git a/sysdeps/aarch64/ilp32/Implies-after b/sysdeps/aarch64/ilp32/Implies-after
+new file mode 100644
+index 0000000000..c7447b54f9
+--- /dev/null
++++ b/sysdeps/aarch64/ilp32/Implies-after
+@@ -0,0 +1,4 @@
++wordsize-32
++ieee754/ldbl-128
++ieee754/dbl-64
++ieee754/flt-32
+diff --git a/sysdeps/aarch64/Implies b/sysdeps/aarch64/lp64/Implies-after
+similarity index 100%
+rename from sysdeps/aarch64/Implies
+rename to sysdeps/aarch64/lp64/Implies-after
+diff --git a/sysdeps/aarch64/preconfigure b/sysdeps/aarch64/preconfigure
+index e1b772c586..8ddf44e8c7 100644
+--- a/sysdeps/aarch64/preconfigure
++++ b/sysdeps/aarch64/preconfigure
+@@ -1,7 +1,11 @@
+ case "$machine" in
+ aarch64*)
+ 	base_machine=aarch64
+-	machine=aarch64
++	case `$CC $CFLAGS $CPPFLAGS -E -dM -xc /dev/null` in
++	*"#define __ILP32__ 1"*) aarch64_config_abi=ilp32 ;;
++	*) aarch64_config_abi=lp64 ;;
++	esac
++	machine=aarch64/$aarch64_config_abi
+ 	mtls_descriptor=desc
+ 	mtls_traditional=trad
+ 	;;
+diff --git a/sysdeps/unix/sysv/linux/aarch64/Implies b/sysdeps/unix/sysv/linux/aarch64/Implies
+index 9c2d2c9870..c508f2e0a6 100644
+--- a/sysdeps/unix/sysv/linux/aarch64/Implies
++++ b/sysdeps/unix/sysv/linux/aarch64/Implies
+@@ -1,2 +1 @@
+ aarch64/nptl
+-unix/sysv/linux/wordsize-64
+diff --git a/sysdeps/unix/sysv/linux/aarch64/Makefile b/sysdeps/unix/sysv/linux/aarch64/Makefile
+index 0839f0b08c..56cf3f31fb 100644
+--- a/sysdeps/unix/sysv/linux/aarch64/Makefile
++++ b/sysdeps/unix/sysv/linux/aarch64/Makefile
+@@ -138,10 +138,14 @@ endif
+ 
+ abi-variants := lp64
+ abi-variants += lp64_be
++abi-variants += ilp32
++abi-variants += ilp32_be
+ 
+ ifeq (,$(filter $(default-abi),$(abi-variants)))
+ Unknown ABI, must be one of $(abi-variants)
+ endif
+ 
+-abi-lp64-condition := !defined __AARCH64EB__
+-abi-lp64_be-condition := defined __AARCH64EB__
++abi-lp64-condition := __WORDSIZE == 64 && !defined __AARCH64EB__
++abi-lp64_be-condition := __WORDSIZE == 64 && defined __AARCH64EB__
++abi-ilp32-condition := __WORDSIZE == 32 && !defined __AARCH64EB__
++abi-ilp32_be-condition := __WORDSIZE == 32 && defined __AARCH64EB__
+diff --git a/sysdeps/unix/sysv/linux/aarch64/configure b/sysdeps/unix/sysv/linux/aarch64/configure
+index b872b9870c..79e172d72a 100644
+--- a/sysdeps/unix/sysv/linux/aarch64/configure
++++ b/sysdeps/unix/sysv/linux/aarch64/configure
+@@ -1,9 +1,24 @@
+ # This file is generated from configure.ac by Autoconf.  DO NOT EDIT!
+  # Local configure fragment for sysdeps/unix/sysv/linux/aarch64.
+ 
+-arch_minimum_kernel=3.7.0
+-
+-test -n "$libc_cv_slibdir" ||
++if test $aarch64_config_abi = ilp32; then
++  # ILP32 uses the 64-bit time system calls (Linux 5.1) and statx (4.11).
++  arch_minimum_kernel=5.10.0
++  test -n "$libc_cv_slibdir" ||
++case "$prefix" in
++/usr | /usr/)
++  libc_cv_slibdir='/libilp32'
++  libc_cv_rtlddir='/lib'
++  if test "$libdir" = '${exec_prefix}/lib'; then
++    libdir='${exec_prefix}/libilp32';
++    # Locale data can be shared between 32-bit and 64-bit libraries.
++    libc_cv_complocaledir='${exec_prefix}/lib/locale'
++  fi
++  ;;
++esac
++else
++  arch_minimum_kernel=3.7.0
++  test -n "$libc_cv_slibdir" ||
+ case "$prefix" in
+ /usr | /usr/)
+   libc_cv_slibdir='/lib64'
+@@ -15,4 +30,5 @@ case "$prefix" in
+   fi
+   ;;
+ esac
++fi
+ 
+diff --git a/sysdeps/unix/sysv/linux/aarch64/configure.ac b/sysdeps/unix/sysv/linux/aarch64/configure.ac
+index 211fa9c317..ccc2046916 100644
+--- a/sysdeps/unix/sysv/linux/aarch64/configure.ac
++++ b/sysdeps/unix/sysv/linux/aarch64/configure.ac
+@@ -1,6 +1,11 @@
+ GLIBC_PROVIDES dnl See aclocal.m4 in the top level source directory.
+ # Local configure fragment for sysdeps/unix/sysv/linux/aarch64.
+ 
+-arch_minimum_kernel=3.7.0
+-
+-LIBC_SLIBDIR_RTLDDIR([lib64], [lib])
++if test $aarch64_config_abi = ilp32; then
++  # ILP32 uses the 64-bit time system calls (Linux 5.1) and statx (4.11).
++  arch_minimum_kernel=5.10.0
++  LIBC_SLIBDIR_RTLDDIR([libilp32], [lib])
++else
++  arch_minimum_kernel=3.7.0
++  LIBC_SLIBDIR_RTLDDIR([lib64], [lib])
++fi
+diff --git a/sysdeps/unix/sysv/linux/aarch64/lp64/Implies b/sysdeps/unix/sysv/linux/aarch64/lp64/Implies
+new file mode 100644
+index 0000000000..42e0ebe14b
+--- /dev/null
++++ b/sysdeps/unix/sysv/linux/aarch64/lp64/Implies
+@@ -0,0 +1,2 @@
++unix/sysv/linux/aarch64
++unix/sysv/linux/wordsize-64

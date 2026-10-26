@@ -1,0 +1,72 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: liviyifan <344781483+liviyifan@users.noreply.github.com>
+Date: Thu, 22 Oct 2026 21:20:11 +0800
+Subject: [PATCH 7/7] aarch64: zero-extend the arguments of strncmp and the SVE
+ memset for ILP32
+
+With the ILP32 ABI the upper 32 bits of argument registers are
+undefined, and the string functions zero-extend them with PTR_ARG and
+SIZE_ARG. strncmp and __memset_sve_zva64 (chosen with SVE and a 64-byte
+ZVA block) did not: with dirty upper halves strncmp faulted and the
+memset wrote to a wrong address. rawmemchr returned the dirty upper
+half, and __syscall_cancel_arch loads through x0; extend those too.
+
+No change for LP64, where the macros are empty.
+---
+ sysdeps/aarch64/multiarch/memset_sve_zva64.S     | 2 ++
+ sysdeps/aarch64/rawmemchr.S                      | 1 +
+ sysdeps/aarch64/strncmp.S                        | 3 +++
+ sysdeps/unix/sysv/linux/aarch64/syscall_cancel.S | 1 +
+ 4 files changed, 7 insertions(+)
+
+diff --git a/sysdeps/aarch64/multiarch/memset_sve_zva64.S b/sysdeps/aarch64/multiarch/memset_sve_zva64.S
+index 7fb40fdd9e..98dd7e3005 100644
+--- a/sysdeps/aarch64/multiarch/memset_sve_zva64.S
++++ b/sysdeps/aarch64/multiarch/memset_sve_zva64.S
+@@ -41,6 +41,8 @@
+ #define dstend2 x5
+ 
+ ENTRY (__memset_sve_zva64)
++	PTR_ARG (0)
++	SIZE_ARG (2)
+ 	dup	v0.16B, valw
+ 	cmp	count, 16
+ 	b.lo	L(set_16)
+diff --git a/sysdeps/aarch64/rawmemchr.S b/sysdeps/aarch64/rawmemchr.S
+index 6b8fab1121..c645976422 100644
+--- a/sysdeps/aarch64/rawmemchr.S
++++ b/sysdeps/aarch64/rawmemchr.S
+@@ -25,6 +25,7 @@
+ */
+ 
+ ENTRY (__rawmemchr)
++	PTR_ARG (0)
+ 	cbz	w1, L(do_strlen)
+ 	mov	x2, -1
+ 	b	__memchr
+diff --git a/sysdeps/aarch64/strncmp.S b/sysdeps/aarch64/strncmp.S
+index da7545f2a5..b121aac707 100644
+--- a/sysdeps/aarch64/strncmp.S
++++ b/sysdeps/aarch64/strncmp.S
+@@ -70,6 +70,9 @@
+ 	nop	/* Pad so that the loop below fits a cache line.  */
+ 	.endr
+ ENTRY_ALIGN (strncmp, 0)
++	PTR_ARG (0)
++	PTR_ARG (1)
++	SIZE_ARG (2)
+ 	cbz	limit, L(ret0)
+ 	eor	tmp1, src1, src2
+ 	mov	zeroones, #REP8_01
+diff --git a/sysdeps/unix/sysv/linux/aarch64/syscall_cancel.S b/sysdeps/unix/sysv/linux/aarch64/syscall_cancel.S
+index 2151f0e08a..31f267f8ab 100644
+--- a/sysdeps/unix/sysv/linux/aarch64/syscall_cancel.S
++++ b/sysdeps/unix/sysv/linux/aarch64/syscall_cancel.S
+@@ -29,6 +29,7 @@
+ 					long int arg6 [x7])  */
+ 
+ ENTRY (__syscall_cancel_arch)
++	PTR_ARG (0)
+ 
+ 	.globl __syscall_cancel_arch_start
+ __syscall_cancel_arch_start:

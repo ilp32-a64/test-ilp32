@@ -1,0 +1,31 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: liviyifan <344781483+liviyifan@users.noreply.github.com>
+Date: Thu, 22 Oct 2026 20:19:01 +0800
+Subject: [PATCH 1/7] malloc: cast the mtrace offsets to uintptr_t for PRIxPTR
+
+The offsets are ptrdiff_t. On targets where ptrdiff_t is long but
+uintptr_t is unsigned int, such as AArch64 ILP32, PRIxPTR does not
+match them and -Werror=format fails.
+---
+ malloc/mtrace-impl.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/malloc/mtrace-impl.c b/malloc/mtrace-impl.c
+index 822f06563d..c4290a9989 100644
+--- a/malloc/mtrace-impl.c
++++ b/malloc/mtrace-impl.c
+@@ -60,12 +60,12 @@ tr_where (const void *caller, Dl_info *info)
+ 		  sign = '-';
+ 
+ 	      sprintf (buf, "(%s%c%" PRIxPTR ")", info->dli_sname, sign,
+-		       offset);
++		       (uintptr_t) offset);
+             }
+ 
+ 	  fprintf (mallstream, "@ %s%s%s[0x%" PRIxPTR "] ",
+ 		   info->dli_fname ? : "", info->dli_fname ? ":" : "", buf,
+-		   caller - info->dli_fbase);
++		   (uintptr_t) (caller - info->dli_fbase));
+         }
+       else
+         fprintf (mallstream, "@ [%p] ", caller);

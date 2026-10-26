@@ -1,0 +1,55 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: liviyifan <344781483+liviyifan@users.noreply.github.com>
+Date: Mon, 26 Oct 2026 20:09:20 +0800
+Subject: [PATCH] aarch64: emit ELF32 GNU property notes for ILP32
+
+The GNU_PROPERTY macro always wrote the ELF64 note layout (8-byte
+alignment, descriptor padded to 16 bytes). In an ILP32 build with BTI
+every assembly object got such a note, and ld warned "corrupt
+GNU_PROPERTY_TYPE (5) size: 0x10" for each of them. ILP32 objects now
+get the ELF32 layout: 4-byte alignment, a 12-byte descriptor, no
+padding.
+
+No change for LP64.
+---
+ sysdeps/aarch64/sysdep.h | 20 ++++++++++++++++++--
+ 1 file changed, 18 insertions(+), 2 deletions(-)
+
+diff --git a/sysdeps/aarch64/sysdep.h b/sysdeps/aarch64/sysdep.h
+index 036eb12527..9ac3f15639 100644
+--- a/sysdeps/aarch64/sysdep.h
++++ b/sysdeps/aarch64/sysdep.h
+@@ -87,8 +87,11 @@ strip_pac (void *p)
+ #define FEATURE_1_PAC 2
+ #define FEATURE_1_GCS 4
+ 
+-/* Add a NT_GNU_PROPERTY_TYPE_0 note.  */
+-#define GNU_PROPERTY(type, value)	\
++/* Add a NT_GNU_PROPERTY_TYPE_0 note.  The notes of ELF64 objects are
++   8-byte aligned with the descriptor padded to 8 bytes, those of ELF32
++   (ILP32) objects 4-byte aligned without padding.  */
++#ifdef __LP64__
++# define GNU_PROPERTY(type, value)	\
+   .section .note.gnu.property, "a";	\
+   .p2align 3;				\
+   .word 4;				\
+@@ -100,6 +103,19 @@ strip_pac (void *p)
+   .word value;				\
+   .word 0;				\
+   .text
++#else
++# define GNU_PROPERTY(type, value)	\
++  .section .note.gnu.property, "a";	\
++  .p2align 2;				\
++  .word 4;				\
++  .word 12;				\
++  .word 5;				\
++  .asciz "GNU";				\
++  .word type;				\
++  .word 4;				\
++  .word value;				\
++  .text
++#endif
+ 
+ /* Add GNU property note with the supported features to all asm code
+    where sysdep.h is included.  */
