@@ -82,7 +82,8 @@ hostenv() { # <source dir> <name> <changelog>
 
 strip_host() { # <dir>: strip the arm64 host binaries (Debian ships them stripped)
 	find "$1" -type f \( -perm -u+x -o -name '*.so' \) -print0 | while IFS= read -r -d '' f; do
-		file -b "$f" | grep -q 'ELF 64-bit.*aarch64' && strip --strip-unneeded "$f"
+		o=$(file -b "$f")	# (not "file | grep -q": pipefail)
+		if grep -q 'ELF 64-bit.*aarch64' <<< "$o"; then strip --strip-unneeded "$f"; fi
 	done
 	true
 }

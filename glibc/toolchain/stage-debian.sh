@@ -94,8 +94,10 @@ fi
 # every target ELF file is ELF32; every target shared object has the BTI property
 while read -r f; do
 	"$RE" -h "$f" > /dev/null 2>&1 || continue		# linker scripts
-	"$RE" -h "$f" | grep -q 'Class: *ELF32' || { echo "not ELF32: $f"; exit 1; }
-	case $f in *.so*) "$RE" -n "$f" | grep -q 'AArch64 feature: BTI' || { echo "no BTI note: $f"; exit 1; } ;; esac
+	# (output into a variable first: "cmd | grep -q" fails under pipefail when grep exits early)
+	o=$("$RE" -h "$f")
+	grep -q 'Class: *ELF32' <<< "$o" || { echo "not ELF32: $f"; exit 1; }
+	case $f in *.so*) o=$("$RE" -n "$f"); grep -q 'AArch64 feature: BTI' <<< "$o" || { echo "no BTI note: $f"; exit 1; } ;; esac
 done < <(find "$STAGE" -type f \( -name '*.so*' -o -name '*.o' \))
 
 # The compiler for the board (build-debian-native.sh, built on an arm64 board; raw installs copied
@@ -113,7 +115,8 @@ if [ "$PARTS" = compiler ]; then
 	# ld's scripts in its libdir, /usr/lib/<triplet> (as Debian's cross binutils); not bfd-plugins
 	# (libdep, static only with --disable-shared)
 	cp -a "$R/lib/$T/ldscripts" "$P/usr/lib/$T/"
-	strings -a "$P/usr/bin/$T-ld" | grep -qx "/usr/lib/$T" || { echo "ld: SCRIPTDIR is not /usr/lib/$T"; exit 1; }
+	o=$(strings -a "$P/usr/bin/$T-ld")
+	grep -qx "/usr/lib/$T" <<< "$o" || { echo "ld: SCRIPTDIR is not /usr/lib/$T"; exit 1; }
 
 	R=$BRD/raw-gcc/usr
 	P=$STAGE/gcc-14-aarch64-linux-gnu-ilp32
@@ -150,7 +153,8 @@ if [ "$PARTS" = compiler ]; then
 	HOSTINFO=$W/hostinfo
 	maxv="" needed=""
 	while read -r f; do
-		file -b "$f" | grep -q 'ELF 64-bit LSB.*ARM aarch64' || continue
+		o=$(file -b "$f"); grep -q 'ELF 64-bit LSB.*ARM aarch64' <<< "$o" || continue
+		grep -q ', stripped' <<< "$o" || { echo "not stripped: $f"; exit 1; }
 		i=$("$RE" -l "$f" 2>/dev/null | sed -n 's/.*interpreter: \(.*\)]/\1/p')
 		case $f in *.so) ;; *) [ "$i" = /lib/ld-linux-aarch64.so.1 ] || { echo "$f: interpreter '$i'"; exit 1; } ;; esac
 		v=$("$RE" --dyn-syms -W "$f" | grep -o 'GLIBC_[0-9.]*' | sort -Vu | tail -1)
@@ -161,8 +165,10 @@ if [ "$PARTS" = compiler ]; then
 	{ echo "highest GLIBC symbol version: $maxv"
 	  echo "NEEDED: $(echo $needed | tr ' ' '\n' | sort -u | tr '\n' ' ')"; } > "$HOSTINFO"
 	cat "$HOSTINFO"
-	strings -a "$STAGE/gcc-14-aarch64-linux-gnu-ilp32/usr/bin/$T-gcc-14" | grep -q -e '--with-build-sysroot' -e /home/ &&
-		{ echo "gcc driver holds build paths"; exit 1; }
+	for f in "$STAGE"/gcc-14-*/usr/bin/* "$STAGE"/g++-14-*/usr/bin/* "$STAGE"/gcc-14-*/usr/$GX/* "$STAGE"/g++-14-*/usr/$GX/* \
+		"$STAGE"/binutils-*/usr/bin/*; do
+		if grep -qaF -e --with-build-sysroot -e /home/ -e /srv/ "$f"; then echo "build path in $f"; exit 1; fi
+	done
 fi
 if grep -rl -a -e /home/ -e ubuntu-VirtualBox -e Ubuntu "$STAGE"; then echo "build machine strings in the files above"; exit 1; fi
 
