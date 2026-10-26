@@ -1,0 +1,58 @@
+From bcbe4448cc854f765a913387518146c2afb6acb0 Mon Sep 17 00:00:00 2001
+From: liviyifan <344781483+liviyifan@users.noreply.github.com>
+Date: Tue, 27 Oct 2026 00:31:08 +0800
+Subject: [PATCH 2/2] libgcc: AArch64 ILP32: emit ELF32 GNU property notes
+
+The GNU_PROPERTY macro of aarch64-asm.h always wrote the ELF64 note
+layout (8-byte alignment, descriptor padded to 16 bytes). When libgcc is
+built for ILP32 with -mbranch-protection=bti, every assembly object
+(lse.S outline atomics, crti.S, crtn.S, the SME support routines) got
+such a note, ld warned "corrupt GNU_PROPERTY_TYPE (5) size: 0x10" for
+each of them, and links with -z force-bti --fatal-warnings failed
+(glibc's libc.so, which links libgcc.a statically). ILP32 objects now
+get the ELF32 layout: 4-byte alignment, a 12-byte descriptor, no
+padding, as GCC itself emits for C code.
+
+No change for LP64.
+
+Signed-off-by: liviyifan <344781483+liviyifan@users.noreply.github.com>
+---
+ libgcc/config/aarch64/aarch64-asm.h | 18 +++++++++++++++++-
+ 1 file changed, 17 insertions(+), 1 deletion(-)
+
+diff --git a/libgcc/config/aarch64/aarch64-asm.h b/libgcc/config/aarch64/aarch64-asm.h
+index 83c2e5944..714b86110 100644
+--- a/libgcc/config/aarch64/aarch64-asm.h
++++ b/libgcc/config/aarch64/aarch64-asm.h
+@@ -68,7 +68,10 @@
+ #define SYMBOL_TYPE(name, _type)
+ #endif
+ 
+-/* Add a NT_GNU_PROPERTY_TYPE_0 note.  */
++/* Add a NT_GNU_PROPERTY_TYPE_0 note.  The notes of ELF64 objects are
++   8-byte aligned with the descriptor padded to 8 bytes, those of ELF32
++   (ILP32) objects 4-byte aligned without padding.  */
++#ifdef __LP64__
+ #define GNU_PROPERTY(type, value)	\
+   .section .note.gnu.property, "a";	\
+   .p2align 3;				\
+@@ -81,6 +84,19 @@
+   .word value;				\
+   .word 0;				\
+   .previous
++#else
++#define GNU_PROPERTY(type, value)	\
++  .section .note.gnu.property, "a";	\
++  .p2align 2;				\
++  .word 4;				\
++  .word 12;				\
++  .word 5;				\
++  .asciz "GNU";				\
++  .word type;				\
++  .word 4;				\
++  .word value;				\
++  .previous
++#endif
+ 
+ #if defined(__linux__) || defined(__FreeBSD__)
+ /* Do not require executable stack.  */
