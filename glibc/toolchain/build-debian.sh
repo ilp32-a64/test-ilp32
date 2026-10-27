@@ -11,6 +11,7 @@
 #   target    aarch64-linux-gnu_ilp32 (default -mabi=ilp32), prefix $TC, sysroot
 #             $TC/aarch64-linux-gnu_ilp32/sysroot (usr/include, libilp32, usr/libilp32)
 #   gcc       ~/work/debian-gcc/gcc-14.2.0 branch ilp32: Debian's 83 patches for the cross
+#             (libgomp-omp_h-multilib reverted: wrong omp_nest_lock_t size for ILP32)
 #             build to arm64 on trixie, autoconf2.69, gcc/distro-defaults.h, the libgcc PAC fix
 #
 # Deviations from Debian's cross build (each also in the MANIFEST):
@@ -32,7 +33,7 @@ GCC_BRANCH=ilp32
 B=$TOP/build
 LOGS=$TOP/logs
 J=${J:-2}          # at most -j2 on this VM (shared with other builds)
-GCC_PKGVERSION="Debian 14.2.0-19+ilp32a64.1"
+GCC_PKGVERSION="Debian 14.2.0-19+ilp32a64.2"
 BU_PKGVERSION="GNU Binutils for Debian"
 export PATH=$TC/bin:$PATH
 export LANG=C.UTF-8
@@ -115,6 +116,26 @@ do_gcc1() {
 	echo "multi-os-directory $("$TC/bin/$T-gcc" -print-multi-os-directory)"
 }
 
+# omp.h's lock and depend types must have the sizes and alignments libgomp's configure measured
+# (Debian's libgomp-omp_h-multilib computed omp_nest_lock_t from the pointer size, wrong for ILP32)
+check_omp_h() { # <gcc driver> <libgomp Makefile> [gcc options]
+	local cc=$1 mk=$2 v t=$(mktemp -d); shift 2
+	declare -A n
+	for v in OMP_LOCK_SIZE OMP_LOCK_ALIGN OMP_NEST_LOCK_SIZE OMP_NEST_LOCK_ALIGN OMP_DEPEND_KIND; do
+		n[$v]=$(sed -n "s/^$v = \([0-9]*\)$/\1/p" "$mk")
+		[ -n "${n[$v]}" ] || { echo "no $v in $mk"; return 1; }
+	done
+	printf '%s\n' '#include <omp.h>' \
+		"_Static_assert (sizeof (omp_lock_t) == ${n[OMP_LOCK_SIZE]}, \"omp_lock_t size\");" \
+		"_Static_assert (_Alignof (omp_lock_t) == ${n[OMP_LOCK_ALIGN]}, \"omp_lock_t align\");" \
+		"_Static_assert (sizeof (omp_nest_lock_t) == ${n[OMP_NEST_LOCK_SIZE]}, \"omp_nest_lock_t size\");" \
+		"_Static_assert (_Alignof (omp_nest_lock_t) == ${n[OMP_NEST_LOCK_ALIGN]}, \"omp_nest_lock_t align\");" \
+		"_Static_assert (sizeof (omp_depend_t) == ${n[OMP_DEPEND_KIND]}, \"omp_depend_t size\");" > "$t/c.c"
+	"$cc" "$@" -fopenmp -fsyntax-only "$t/c.c" || { rm -rf "$t"; echo "omp.h does not match libgomp"; return 1; }
+	echo "omp.h matches libgomp: lock ${n[OMP_LOCK_SIZE]}/${n[OMP_LOCK_ALIGN]}, nest lock ${n[OMP_NEST_LOCK_SIZE]}/${n[OMP_NEST_LOCK_ALIGN]}, depend ${n[OMP_DEPEND_KIND]}"
+	rm -rf "$t"
+}
+
 do_gcc2() {
 	check_gcc_src
 	test -f "$SYSROOT/libilp32/libc.so.6" || { echo "glibc is not installed in $SYSROOT"; return 1; }
@@ -128,6 +149,7 @@ do_gcc2() {
 	make -j"$J"
 	make install
 	link_unsuffixed
+	check_omp_h "$TC/bin/$T-gcc" "$B/gcc2/$T/libgomp/Makefile"
 	"$TC/bin/$T-g++" -v 2>&1 | tail -1
 	ls "$TC/$T"/libilp32 2>/dev/null | grep -E '^lib(gcc_s|stdc\+\+|atomic|gomp)\.so' || true
 }

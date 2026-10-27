@@ -35,9 +35,17 @@ KTREE=$GLIBC_W/linux		# detached worktree of linux-ilp32 at KCOMMIT (glibc's khe
 KCOMMIT=64b6f40074
 HDR=usr/$T/include
 V_GLIBC=2.41-12+deb13u4+ilp32a64.1
-V_GCC=14.2.0-19+ilp32a64.1
+V_GCC=14.2.0-19+ilp32a64.1		# the GCC runtime packages
+V_GCC_CC=14.2.0-19+ilp32a64.2		# the compiler packages (omp.h fixed); runtime unchanged
 V_BU=2.44-3+ilp32a64.1
 V_LINUX=6.12.114-1+ilp32a64.2
+# the toolchain must be the build of the packages' version: gcc -v shows it (--with-pkgversion)
+o=$("$TC/bin/$T-gcc" -v 2>&1)
+case $PARTS in
+runtime) want=$V_GCC ;;
+compiler) want=$V_GCC_CC ;;
+esac
+grep -qF "(Debian $want)" <<< "$o" || { echo "$TC is not the gcc $want build"; exit 1; }
 RE=$TC/bin/$T-readelf
 
 case $PARTS in runtime|compiler) ;; *) echo "PARTS must be runtime or compiler"; exit 1 ;; esac
@@ -201,8 +209,9 @@ manifest() {
 		echo "  (built with binutils $V_BU)"
 	else
 		echo "  binutils-aarch64-linux-gnu-ilp32  $V_BU"
-		echo "  gcc-14-aarch64-linux-gnu-ilp32, g++-14-aarch64-linux-gnu-ilp32  $V_GCC"
-		echo "  (target files from the runtime hand-off's toolchain: glibc $V_GLIBC, kernel UAPI $V_LINUX)"
+		echo "  gcc-14-aarch64-linux-gnu-ilp32, g++-14-aarch64-linux-gnu-ilp32  $V_GCC_CC"
+		echo "  (GCC runtime packages unchanged: $V_GCC)"
+		echo "  (target files from the toolchain build of $V_GCC_CC; glibc $V_GLIBC, kernel UAPI $V_LINUX)"
 	fi
 	echo
 	echo "sources (Debian 13 trixie / trixie-security, .dsc sha256):"
@@ -213,9 +222,16 @@ manifest() {
 	echo "patches:"
 	echo "  glibc: Debian's 80 + test-ilp32 glibc/debian/patches/0001-0008"
 	echo "         (= glibc-ilp32 ilp32-2.41 6a0b8e3665..be1ef73c3c)"
+	n=$(git -C "$GCC_SRC" rev-list --count debian..ilp32)
 	echo "  gcc:   Debian's 83 for the cross build to arm64 on trixie (debian/rules patch) + test-ilp32"
-	echo "         glibc/toolchain/patches/gcc-14.2.0-debian/0001-0002 (libgcc pac-ret unwind, libgcc ELF32"
-	echo "         property notes) = debian-gcc gcc-14.2.0 branch ilp32 $(git -C "$GCC_SRC" rev-parse --short ilp32)"
+	echo "         glibc/toolchain/patches/gcc-14.2.0-debian/ ($n: $(git -C "$GCC_SRC" log --reverse --format=%s debian..ilp32 |
+		sed 's/^\([^:]*: [^:]*\):.*/\1/' | paste -sd ';' | sed 's/;/; /g'))"
+	echo "         = debian-gcc gcc-14.2.0 branch ilp32 $(git -C "$GCC_SRC" rev-parse --short ilp32)"
+	o=$(git -C "$GCC_SRC" log --format=%s debian..ilp32)
+	if grep -q "revert Debian's libgomp-omp_h-multilib" <<< "$o"; then
+		echo "         (Debian's libgomp-omp_h-multilib reverted: its omp_nest_lock_t was 12 bytes/align 4 for"
+		echo "         ILP32, libgomp's is 24/8; omp.h has configure's sizes again, as upstream)"
+	fi
 	echo "  binutils: Debian's (dpkg-source), none added"
 	echo
 	echo "glibc configure: $(sed -n 's/^  \$ [^ ]*configure //p' "$GLIBC_W/build/glibc/config.log" | head -1 |
@@ -234,6 +250,7 @@ manifest() {
 	echo "  - glibc: no --enable-memory-tagging (MTE tags are in pointer bits 56-59), no libmvec (--disable-mathvec,"
 	echo "    not built for ILP32 anyway), --enable-kernel=3.2 raised to 5.10 (the ILP32 minimum), separate ILP32"
 	echo "    headers (the port changes installed headers), only the ILP32 libraries (no arm64 pass)"
+	echo "  - gcc: Debian's libgomp-omp_h-multilib not applied (reverted): wrong omp_nest_lock_t size for ILP32"
 	echo "  - gcc: --disable-multiarch (gcc's aarch64 multiarch name is the LP64 triplet), --with-abi=ilp32"
 	echo "    --with-multilib-list=ilp32 --disable-multilib, --enable-languages=c,c++, --disable-libsanitizer"
 	echo "    (no ILP32 support); otherwise Debian's layout (gcc-cross/$T/14, -14 program suffix)"

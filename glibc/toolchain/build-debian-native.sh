@@ -13,6 +13,7 @@
 #            raw-binutils/, raw-gcc/, logs/
 #   J        parallel jobs (default 4)
 # Prefix /usr, sysroot /, headers in /usr/aarch64-linux-gnu_ilp32/include, libraries in /usr/libilp32.
+# gcc: the debian-gcc branch ilp32, as build-debian.sh (Debian's libgomp-omp_h-multilib reverted).
 # Deviations besides those of build-debian.sh (also in the MANIFEST):
 #   binutils --disable-shared    the host libbfd/libopcodes/libctf/libsframe are linked statically,
 #                                so that they do not collide with Debian's libbinutils of the same names
@@ -32,7 +33,7 @@ B=$W/build
 LOGS=$W/logs
 J=${J:-4}
 HDRDIR=/usr/$T/include			# target system headers on the installed system
-GCC_PKGVERSION="Debian 14.2.0-19+ilp32a64.1"
+GCC_PKGVERSION="Debian 14.2.0-19+ilp32a64.2"
 BU_PKGVERSION="GNU Binutils for Debian"
 BUGURL=https://github.com/ilp32-a64/debian-ilp32/issues
 export LC_ALL=C TZ=UTC
@@ -105,6 +106,26 @@ do_binutils() {
 	o=$("$W/raw-binutils/usr/bin/$T-ld" --version); echo "${o%%$'\n'*}"
 }
 
+# omp.h's lock and depend types must have the sizes and alignments libgomp's configure measured
+# (Debian's libgomp-omp_h-multilib computed omp_nest_lock_t from the pointer size, wrong for ILP32)
+check_omp_h() { # <gcc driver> <libgomp Makefile> [gcc options]
+	local cc=$1 mk=$2 v t=$(mktemp -d); shift 2
+	declare -A n
+	for v in OMP_LOCK_SIZE OMP_LOCK_ALIGN OMP_NEST_LOCK_SIZE OMP_NEST_LOCK_ALIGN OMP_DEPEND_KIND; do
+		n[$v]=$(sed -n "s/^$v = \([0-9]*\)$/\1/p" "$mk")
+		[ -n "${n[$v]}" ] || { echo "no $v in $mk"; return 1; }
+	done
+	printf '%s\n' '#include <omp.h>' \
+		"_Static_assert (sizeof (omp_lock_t) == ${n[OMP_LOCK_SIZE]}, \"omp_lock_t size\");" \
+		"_Static_assert (_Alignof (omp_lock_t) == ${n[OMP_LOCK_ALIGN]}, \"omp_lock_t align\");" \
+		"_Static_assert (sizeof (omp_nest_lock_t) == ${n[OMP_NEST_LOCK_SIZE]}, \"omp_nest_lock_t size\");" \
+		"_Static_assert (_Alignof (omp_nest_lock_t) == ${n[OMP_NEST_LOCK_ALIGN]}, \"omp_nest_lock_t align\");" \
+		"_Static_assert (sizeof (omp_depend_t) == ${n[OMP_DEPEND_KIND]}, \"omp_depend_t size\");" > "$t/c.c"
+	"$cc" "$@" -fopenmp -fsyntax-only "$t/c.c" || { rm -rf "$t"; echo "omp.h does not match libgomp"; return 1; }
+	echo "omp.h matches libgomp: lock ${n[OMP_LOCK_SIZE]}/${n[OMP_LOCK_ALIGN]}, nest lock ${n[OMP_NEST_LOCK_SIZE]}/${n[OMP_NEST_LOCK_ALIGN]}, depend ${n[OMP_DEPEND_KIND]}"
+	rm -rf "$t"
+}
+
 do_gcc() {
 	rm -rf "$B/gcc" "$W/raw-gcc"; mkdir -p "$B/gcc"; cd "$B/gcc"
 	hostenv "$GCC_SRC" gcc-14 "$W/src/gcc-14.changelog"
@@ -160,6 +181,7 @@ do_gcc() {
 	fi
 	make -j"$J"
 	make install DESTDIR="$W/raw-gcc"
+	check_omp_h "$W/raw-gcc/usr/bin/$T-gcc-14" "$B/gcc/$T/libgomp/Makefile" --sysroot="$BS"
 	strip_host "$W/raw-gcc"
 	"$W/raw-gcc/usr/bin/$T-gcc-14" -v 2>&1 | tail -1
 	# the host programs that are packaged hold no build path

@@ -1,0 +1,45 @@
+From bbfc2069f7c44915744c37f62368647a0caca48d Mon Sep 17 00:00:00 2001
+From: liviyifan <344781483+liviyifan@users.noreply.github.com>
+Date: Wed, 28 Oct 2026 07:12:17 +0800
+Subject: [PATCH 3/3] libgomp: ILP32: keep the configured omp_nest_lock_t size
+ (revert Debian's libgomp-omp_h-multilib)
+
+Debian's libgomp-omp_h-multilib.diff declares omp_nest_lock_t in omp.h
+as unsigned char[8 + sizeof (void *)] aligned to sizeof (void *), so that
+one header serves all multilibs. For AArch64 ILP32 that is 12 bytes,
+align 4, but libgomp's nest lock is 24 bytes, align 8, as configure
+measures it (OMP_NEST_LOCK_SIZE, OMP_NEST_LOCK_ALIGN). Programs compiled
+with that header allocate too small a lock and libgomp overwrites the
+memory after it (libgomp.c/lock-3.c aborts). The ILP32 build has a single
+ABI and no multilibs, so the configured values are used again, as
+upstream.
+
+Signed-off-by: liviyifan <344781483+liviyifan@users.noreply.github.com>
+---
+ libgomp/omp.h.in | 11 -----------
+ 1 file changed, 11 deletions(-)
+
+diff --git a/libgomp/omp.h.in b/libgomp/omp.h.in
+index 60014814c..9b0064733 100644
+--- a/libgomp/omp.h.in
++++ b/libgomp/omp.h.in
+@@ -52,19 +52,8 @@ typedef struct
+ 
+ typedef struct
+ {
+-  /*
+-    Derive OMP_NEST_LOCK_SIZE and OMP_NEST_LOCK_ALIGN, don't hard
+-    code the values because the header is used for all multilibs.
+-    OMP_NEST_LOCK_SIZE  = @OMP_NEST_LOCK_SIZE@
+-    OMP_NEST_LOCK_ALIGN = @OMP_NEST_LOCK_ALIGN@
+-  */
+-#if defined(__linux__) && !(defined(__hppa__) || defined(__alpha__))
+-  unsigned char _x[8 + sizeof (void *)] 
+-    __attribute__((__aligned__(sizeof (void *))));
+-#else
+   unsigned char _x[@OMP_NEST_LOCK_SIZE@] 
+     __attribute__((__aligned__(@OMP_NEST_LOCK_ALIGN@)));
+-#endif
+ } omp_nest_lock_t;
+ #endif
+ 
