@@ -12,18 +12,21 @@ BASE=$W/base/trixie-arm64-buildd.tar.zst
 MIRROR=http://deb.debian.org/debian
 
 mounted() { local o; o=$(findmnt -rn -o TARGET); grep -qx "$1" <<< "$o"; }	# (no pipe: pipefail)
-umount_all() { # <chroot>
+umount_all() { # <chroot>: never lazily (that would cut /dev and /proc away from a running user)
 	local m
 	for m in "$1/dev/pts" "$1/dev" "$1/proc"; do
-		if mounted "$m"; then umount "$m" || umount -l "$m"; fi
+		if mounted "$m"; then umount "$m" || { echo "cannot unmount $m (in use)"; return 1; }; fi
 	done
 }
-run_in() { # <chroot> <cmd...>
-	local c=$1 rc; shift
+run_in() { # <chroot> <cmd...>: one run per chroot at a time
+	local c=$1 rc m; shift
+	for m in "$c/proc" "$c/dev" "$c/dev/pts"; do
+		if mounted "$m"; then echo "$c is in use by another run ($m is mounted)"; return 1; fi
+	done
 	trap "umount_all '$c'" EXIT
-	mounted "$c/proc" || mount -t proc proc "$c/proc"
-	mounted "$c/dev" || mount --bind /dev "$c/dev"
-	mounted "$c/dev/pts" || mount --bind /dev/pts "$c/dev/pts"
+	mount -t proc proc "$c/proc"
+	mount --bind /dev "$c/dev"
+	mount --bind /dev/pts "$c/dev/pts"
 	set +e
 	chroot "$c" /usr/bin/env -i HOME=/root LANG=C.UTF-8 TERM=dumb \
 		PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin "$@"
