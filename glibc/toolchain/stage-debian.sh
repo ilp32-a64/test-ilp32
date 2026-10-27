@@ -113,58 +113,73 @@ while read -r f; do
 	if grep -q 'corrupt' <<< "$o"; then echo "corrupt note in $f:"; grep 'corrupt' <<< "$o" | head -3; exit 1; fi
 done < <(find "$STAGE" -type f \( -name '*.so*' -o -name '*.o' -o -name '*.a' \) ! -path '*/usr/bin/*' ! -path '*/libexec/*')
 
-# The compiler for the board (build-debian-native.sh, built on an arm64 board; raw installs copied
-# to $BRD): host side from its raw installs, target side unchanged from the x86-hosted toolchain.
-# Names with -14 only (the unversioned links are made by the meta packages gcc-/g++-aarch64-linux-gnu-ilp32).
-BRD=${BRD:-$TOP/native}
+# The compiler for the board: the release build of build-debian-clean.sh (a fresh clean chroot on an
+# arm64 Debian 13 system; its output copied to $CLEAN), host and target side. binutils is released
+# and unchanged, so not part of this hand-off. Names with -14 only (the meta packages add the
+# unversioned links).
+CLEAN=${CLEAN:-$TOP/clean}
 GD=lib/gcc-cross/$T/14 GX=libexec/gcc-cross/$T/14
 if [ "$PARTS" = compiler ]; then
-	[ -d "$BRD/raw-binutils" ] && [ -d "$BRD/raw-gcc" ] || { echo "no raw installs in $BRD"; exit 1; }
-	R=$BRD/raw-binutils/usr
-	P=$STAGE/binutils-aarch64-linux-gnu-ilp32
-	mkdir -p "$P/usr/bin" "$P/usr/$T" "$P/usr/lib/$T"
-	cp -a "$R"/bin/$T-* "$P/usr/bin/"
-	cp -a "$R/$T/bin" "$P/usr/$T/"
-	# ld's scripts in its libdir, /usr/lib/<triplet> (as Debian's cross binutils); not bfd-plugins
-	# (libdep, static only with --disable-shared)
-	cp -a "$R/lib/$T/ldscripts" "$P/usr/lib/$T/"
-	o=$(strings -a "$P/usr/bin/$T-ld")
-	grep -qx "/usr/lib/$T" <<< "$o" || { echo "ld: SCRIPTDIR is not /usr/lib/$T"; exit 1; }
-
-	R=$BRD/raw-gcc/usr
+	R=$CLEAN/raw-gcc/usr
+	[ -d "$R" ] && [ -f "$CLEAN/dpkg-l.txt" ] && [ -f "$CLEAN/omp-check.txt" ] || { echo "no clean build in $CLEAN"; exit 1; }
+	o=$(strings -a "$R/bin/$T-gcc-14")
+	grep -qF "(Debian $V_GCC_CC)" <<< "$o" || { echo "$R is not the gcc $V_GCC_CC build"; exit 1; }
 	P=$STAGE/gcc-14-aarch64-linux-gnu-ilp32
 	X=$STAGE/g++-14-aarch64-linux-gnu-ilp32
-	mkdir -p "$P/usr/bin" "$X/usr/bin" "$P/usr/$GX" "$X/usr/$GX" "$P/usr/$GD"
+	mkdir -p "$P/usr/bin" "$X/usr/bin" "$P/usr/$GX" "$X/usr/$GX" "$P/usr/$GD" "$X/usr/$GD" "$X/usr/$T/include/c++"
 	for f in gcc cpp gcc-ar gcc-nm gcc-ranlib gcov gcov-dump gcov-tool lto-dump; do
 		cp -a "$R/bin/$T-$f-14" "$P/usr/bin/"
 	done
 	cp -a "$R/bin/$T-g++-14" "$X/usr/bin/"
 	for f in cc1 collect2 lto1 lto-wrapper liblto_plugin.so; do cp -a "$R/$GX/$f" "$P/usr/$GX/"; done
 	for f in cc1plus g++-mapper-server; do cp -a "$R/$GX/$f" "$X/usr/$GX/"; done
-	# gcc's headers plus those the target libraries install there (unwind.h, omp.h, ...): the
-	# x86-hosted toolchain's directory, after checking that every header of the board build is in it
-	(cd "$R/$GD/include" && find . -type f | while read -r f; do cmp "$f" "$TC/$GD/include/$f"; done)
-	cp -a "$TC/$GD/include" "$TC/$GD/include-fixed" "$P/usr/$GD/"
+	# gcc's headers (with those of the target libraries: unwind.h, omp.h, ...), fixed headers (built
+	# from the installed libc6-dev-ilp32, so their comments name /usr/<triplet>/include), start files
+	cp -a "$R/$GD/include" "$R/$GD/include-fixed" "$P/usr/$GD/"
 	# not libssp's headers: libssp is not packaged (glibc provides the stack protector)
 	rm -rf "$P/usr/$GD/include/ssp"
 	for f in crtbegin.o crtbeginS.o crtbeginT.o crtend.o crtendS.o crtfastmath.o libgcc.a libgcc_eh.a libgcov.a; do
-		cp -a "$TC/$GD/$f" "$P/usr/$GD/"
+		cp -a "$R/$GD/$f" "$P/usr/$GD/"
 	done
-	# fixincludes names the original header in a comment: the toolchain's sysroot there, the installed
-	# system's header directory here (comment only)
-	grep -rl "$TS/usr/include/" "$P/usr/$GD/include-fixed" | xargs -r sed -i "s|$TS/usr/include/|/$HDR/|g"
 	# the target libraries' development files: static libraries, spec file, linker script and links to
 	# the runtime libraries in /usr/libilp32, in gcc's library directory as in Debian's cross gcc
 	# packages (libgcc-14-dev-<arch>-cross, libstdc++-14-dev-<arch>-cross), not in the tooldir:
 	# gcc reaches <tooldir>/libilp32 only as <tooldir>/lib/../libilp32, which needs <tooldir>/lib
-	for f in libgcc_s.so libatomic.a libgomp.a libgomp.spec; do cp -a "$GCCLIB/$f" "$P/usr/$GD/"; done
+	L=$R/$T/libilp32
+	for f in libgcc_s.so libatomic.a libgomp.a libgomp.spec; do cp -a "$L/$f" "$P/usr/$GD/"; done
 	ln -s /usr/libilp32/libatomic.so.1 "$P/usr/$GD/libatomic.so"
 	ln -s /usr/libilp32/libgomp.so.1 "$P/usr/$GD/libgomp.so"
-	mkdir -p "$X/usr/$GD" "$X/usr/$T/include/c++"
-	for f in libstdc++.a libsupc++.a libstdc++fs.a libstdc++exp.a; do cp -a "$GCCLIB/$f" "$X/usr/$GD/"; done
+	for f in libstdc++.a libsupc++.a libstdc++fs.a libstdc++exp.a; do cp -a "$L/$f" "$X/usr/$GD/"; done
 	ln -s /usr/libilp32/libstdc++.so.6 "$X/usr/$GD/libstdc++.so"
-	cp -a "$TC/$T/include/c++/14" "$X/usr/$T/include/c++/"
+	cp -a "$R/$T/include/c++/14" "$X/usr/$T/include/c++/"
 	find "$STAGE" -name '*.la' -delete
+
+	# the target code is the released runtime's (.1, stage-runtime-20261027) and the x86-hosted
+	# toolchain's: identical except debug info, build-id and .comment (the version string)
+	RT=${RUNTIME_STAGE:-$TOP/stage-runtime-20261027}
+	OC=$TC/bin/$T-objcopy
+	samecode() { # <a> <b>
+		"$OC" --strip-debug --remove-section=.note.gnu.build-id --remove-section=.comment "$1" "$W/a" 2>/dev/null
+		"$OC" --strip-debug --remove-section=.note.gnu.build-id --remove-section=.comment "$2" "$W/b" 2>/dev/null
+		cmp -s "$W/a" "$W/b"
+	}
+	CODECHECK=$W/codecheck
+	for f in libgcc-s1-ilp32/usr/libilp32/libgcc_s.so.1 libstdc++6-ilp32/usr/libilp32/libstdc++.so.6.0.33 \
+		libatomic1-ilp32/usr/libilp32/libatomic.so.1.2.0 libgomp1-ilp32/usr/libilp32/libgomp.so.1.0.0; do
+		samecode "$RT/$f" "$L/$(basename "$f")" || { echo "code differs from the released runtime: $f"; exit 1; }
+		echo "  $(basename "$f"): same code as the released runtime $V_GCC" >> "$CODECHECK"
+	done
+	for f in libatomic.a libgomp.a libstdc++.a libsupc++.a libstdc++fs.a libstdc++exp.a; do
+		samecode "$TC/$T/libilp32/$f" "$L/$f" || { echo "code differs from the x86-hosted toolchain: $f"; exit 1; }
+	done
+	for f in crtbegin.o crtbeginS.o crtbeginT.o crtend.o crtendS.o crtfastmath.o libgcc.a libgcc_eh.a libgcov.a; do
+		samecode "$TC/$GD/$f" "$R/$GD/$f" || { echo "code differs from the x86-hosted toolchain: $f"; exit 1; }
+	done
+	echo "  static libraries and start files: same code as the x86-hosted toolchain's $V_GCC_CC build" >> "$CODECHECK"
+	diff -r "$TC/$GD/include" "$R/$GD/include" > /dev/null || { echo "gcc headers differ from the x86-hosted toolchain"; exit 1; }
+	diff -r "$TC/$T/include/c++/14" "$R/$T/include/c++/14" > /dev/null || { echo "C++ headers differ from the x86-hosted toolchain"; exit 1; }
+	echo "  gcc and C++ headers: identical to the x86-hosted toolchain's" >> "$CODECHECK"
+	cat "$CODECHECK"
 
 	# host binaries: ELF64 arm64 for Debian 13 (glibc <= 2.41), and the libraries they need
 	HOSTINFO=$W/hostinfo
@@ -177,15 +192,15 @@ if [ "$PARTS" = compiler ]; then
 		v=$("$RE" --dyn-syms -W "$f" | grep -o 'GLIBC_[0-9.]*' | sort -Vu | tail -1)
 		maxv=$(printf '%s\n%s\n' "$maxv" "$v" | sort -V | tail -1)
 		needed="$needed $("$RE" -d "$f" | sed -n 's/.*Shared library: \[\(.*\)\]/\1/p' | tr '\n' ' ')"
-	done < <(find "$STAGE"/binutils-* "$STAGE"/gcc-14-* "$STAGE"/g++-14-* -type f)
+	done < <(find "$STAGE"/gcc-14-* "$STAGE"/g++-14-* -type f)
 	[ "$(printf '%s\n%s\n' "$maxv" GLIBC_2.41 | sort -V | tail -1)" = GLIBC_2.41 ] || { echo "host binaries need $maxv"; exit 1; }
 	{ echo "highest GLIBC symbol version: $maxv"
 	  echo "NEEDED: $(echo $needed | tr ' ' '\n' | sort -u | tr '\n' ' ')"; } > "$HOSTINFO"
 	cat "$HOSTINFO"
-	for f in "$STAGE"/gcc-14-*/usr/bin/* "$STAGE"/g++-14-*/usr/bin/* "$STAGE"/gcc-14-*/usr/$GX/* "$STAGE"/g++-14-*/usr/$GX/* \
-		"$STAGE"/binutils-*/usr/bin/*; do
-		if grep -qaF -e --with-build-sysroot -e /home/ -e /srv/ "$f"; then echo "build path in $f"; exit 1; fi
-	done
+	# no build path anywhere in the trees: the clean build's /build/src, /build/build, /build/raw-gcc
+	# (its path maps give /usr/src/gcc-14/build/..., which is fine), the board's and the VM's paths
+	if grep -rlaF -e /build/src/ -e /build/build/ -e /build/raw-gcc/ -e /srv/ -e /home/ \
+		"$STAGE"/gcc-14-* "$STAGE"/g++-14-*; then echo "build path in the files above"; exit 1; fi
 fi
 if grep -rl -a -e /home/ -e ubuntu-VirtualBox -e Ubuntu "$STAGE"; then echo "build machine strings in the files above"; exit 1; fi
 
@@ -213,10 +228,10 @@ manifest() {
 		echo "  linux-libc-dev-ilp32  $V_LINUX"
 		echo "  (built with binutils $V_BU)"
 	else
-		echo "  binutils-aarch64-linux-gnu-ilp32  $V_BU"
 		echo "  gcc-14-aarch64-linux-gnu-ilp32, g++-14-aarch64-linux-gnu-ilp32  $V_GCC_CC"
-		echo "  (GCC runtime packages unchanged: $V_GCC)"
-		echo "  (target files from the toolchain build of $V_GCC_CC; glibc $V_GLIBC, kernel UAPI $V_LINUX)"
+		echo "runtime: $V_GCC"
+		echo "  (the GCC runtime packages stay at $V_GCC; binutils-aarch64-linux-gnu-ilp32 $V_BU,"
+		echo "  libc6-ilp32/libc6-dev-ilp32 $V_GLIBC and linux-libc-dev-ilp32 $V_LINUX are released and unchanged)"
 	fi
 	echo
 	echo "sources (Debian 13 trixie / trixie-security, .dsc sha256):"
@@ -263,22 +278,26 @@ manifest() {
 	echo "  - .dsc files pinned by sha256 (no Debian keyring for dpkg-source)"
 	if [ -n "${HOSTINFO:-}" ]; then
 		echo
-		echo "compiler for the board (binutils, gcc-14, g++-14 trees): test-ilp32 glibc/toolchain/build-debian-native.sh"
-		echo "  built natively on an arm64 Debian 13 board (build = host = aarch64-linux-gnu, Debian's gcc 14.2.0-19),"
-		echo "  target aarch64-linux-gnu_ilp32, linked against Debian 13's arm64 gmp, mpfr, mpc, isl, zlib, zstd, jansson;"
-		echo "  binutils from apt-get source binutils=2.44-3 on the board, gcc from the same tree as the x86-hosted toolchain;"
-		echo "  host flags -g -O2, -Wl,-z,relro (Debian's for cross compilers); host binaries stripped"
-		echo "  prefix /usr, sysroot /, headers /$HDR, libraries /usr/libilp32, gcc in /usr/lib/gcc-cross/$T/14"
-		echo "  and /usr/libexec/gcc-cross/$T/14; only the -14 names (meta packages add the unversioned links);"
+		echo "release build (gcc-14, g++-14 trees): test-ilp32 glibc/toolchain/build-debian-clean.sh, in a fresh clean"
+		echo "  chroot (pristine Debian 13 arm64 buildd base, thrown away afterwards) on an arm64 Debian 13 board:"
+		echo "  build = host = aarch64-linux-gnu with Debian's gcc 14.2.0-19, target aarch64-linux-gnu_ilp32;"
+		echo "  Build-Depends of gcc-14 14.2.0-19 from Debian, plus the released ILP32 packages from the signed"
+		echo "  repository (keyring fingerprint D5723B340CBE7C99209182439C6A5E841E289B20), versions pinned:"
+		echo "  binutils-aarch64-linux-gnu-ilp32 $V_BU, libc6-ilp32 and libc6-dev-ilp32 $V_GLIBC,"
+		echo "  linux-libc-dev-ilp32 $V_LINUX; --with-sysroot=/ against them (installed packages list below)"
+		sed 's/^/  /' "$CLEAN/build-env.txt"
+		echo "  host linked against Debian 13's arm64 gmp, mpfr, mpc, isl, zlib, zstd; host flags -g -O2,"
+		echo "  -Wl,-z,relro (Debian's for cross compilers); host binaries stripped; gcc --with-bugurl: the project's"
+		echo "  tracker; target libraries -g -O2 -mbranch-protection=bti (+ prefix maps)"
+		echo "  prefix /usr, headers /$HDR, libraries /usr/libilp32, gcc in /usr/lib/gcc-cross/$T/14 and"
+		echo "  /usr/libexec/gcc-cross/$T/14; only the -14 names (meta packages add the unversioned links);"
 		echo "  the target libraries' dev files (lib*.a, libgomp.spec, libgcc_s.so script, lib*.so links to"
-		echo "  /usr/libilp32) in /usr/lib/gcc-cross/$T/14 as Debian's cross gcc packages, no /usr/$T/libilp32"
-		echo "  target files (crt*.o, libgcc*.a, libgcov.a, headers, libstdc++/libatomic/libgomp static libraries,"
-		echo "  C++ headers) are the x86-hosted toolchain's, unchanged (fixincludes' path comments rewritten),"
-		echo "  without include/ssp (libssp, libitm are built but not packaged)"
-		echo "  binutils deviations: --disable-shared (static libbfd/libopcodes/libctf/libsframe, no collision"
-		echo "  with Debian's libbinutils; so no bfd-plugins/libdep.so), --disable-gprofng (not packaged);"
-		echo "  libdir /usr/lib/$T as Debian's cross binutils (ld scripts there); gcc --with-bugurl: the project's tracker"
+		echo "  /usr/libilp32) in /usr/lib/gcc-cross/$T/14 as Debian's cross gcc packages; without include/ssp"
+		echo "  (libssp and libitm are built but not packaged)"
 		sed 's/^/  /' "$HOSTINFO"
+		echo "  $(cat "$CLEAN/omp-check.txt")"
+		echo "  target code checks:"
+		cat "$CODECHECK"
 		echo "gcc (board) configure: $(strings -a "$STAGE/gcc-14-aarch64-linux-gnu-ilp32/usr/bin/$T-gcc-14" | grep -m1 -- '--with-pkgversion')"
 	fi
 	echo
@@ -286,10 +305,15 @@ manifest() {
 	echo "  test-ilp32 run-glibc-test.sh 5/5, NOTIME32=1 4/4; libgcc pac-ret unwind (run-pac.sh) 9/9 on"
 	echo "  -cpu max and cortex-a35; glibc PAC/BTI/dirty arguments (pac-run.sh) 7/7 on both"
 	if [ "$PARTS" = compiler ]; then
-		echo "native build checks: the board build's target libraries (libgcc_s, libstdc++, libatomic, libgomp,"
-		echo "  their static libraries, libgcc*.a, crt*.o) are identical to the x86-hosted toolchain's except debug"
-		echo "  info and build-id; C++ and gcc headers identical. Testsuites on the board (libstdc++, libgomp, glibc"
-		echo "  make check): run after this hand-off, results reported separately."
+		echo "testsuites of the release build, in the same clean chroot (kernel $(sed -n 's/^kernel: //p' "$CLEAN/build-env.txt")):"
+		for f in "$CLEAN"/testsuite/*.sum; do
+			[ -f "$f" ] || { echo "  (none)"; continue; }
+			echo "  $(basename "$f"):"
+			sed -n '/=== .* Summary ===/,$p' "$f" | grep '^#' | sed 's/^/    /'
+			grep -E '^(FAIL|XPASS|UNRESOLVED|ERROR):' "$f" | sed 's/^/    /'
+		done
+		[ -f "$CLEAN/testsuite/NOTES" ] && sed 's/^/  /' "$CLEAN/testsuite/NOTES"
+		echo "installed toolchain test (toolchain-test.sh, the trees installed into a clean chroot): see the hand-off message"
 	fi
 	echo
 	echo "doc/: Debian's copyright and changelog of glibc, gcc-14 and binutils; gcc-COPYING.RUNTIME"
@@ -301,6 +325,11 @@ manifest() {
 			else echo "  $f $(sha256sum ".$f" | cut -c1-16)"; fi
 		done)
 	done
+	if [ "$PARTS" = compiler ]; then
+		echo
+		echo "## build environment: packages installed in the clean chroot (dpkg-query)"
+		sed 's/^/  /' "$CLEAN/dpkg-l.txt"
+	fi
 }
 manifest > "$STAGE/MANIFEST"
 for p in "$STAGE"/*-ilp32; do echo "$(basename "$p"): $(find "$p" \( -type f -o -type l \) | wc -l) files"; done
