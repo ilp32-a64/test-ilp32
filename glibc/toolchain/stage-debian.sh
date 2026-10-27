@@ -140,14 +140,16 @@ if [ "$PARTS" = compiler ]; then
 	# fixincludes names the original header in a comment: the toolchain's sysroot there, the installed
 	# system's header directory here (comment only)
 	grep -rl "$TS/usr/include/" "$P/usr/$GD/include-fixed" | xargs -r sed -i "s|$TS/usr/include/|/$HDR/|g"
-	# tooldir libraries: static libraries, spec file, linker script, links to the runtime libraries
-	d=$T/libilp32
-	mkdir -p "$P/usr/$d" "$X/usr/$d" "$X/usr/$T/include/c++"
-	for f in libgcc_s.so libatomic.a libgomp.a libgomp.spec; do cp -a "$GCCLIB/$f" "$P/usr/$d/"; done
-	ln -s /usr/libilp32/libatomic.so.1 "$P/usr/$d/libatomic.so"
-	ln -s /usr/libilp32/libgomp.so.1 "$P/usr/$d/libgomp.so"
-	for f in libstdc++.a libsupc++.a libstdc++fs.a libstdc++exp.a; do cp -a "$GCCLIB/$f" "$X/usr/$d/"; done
-	ln -s /usr/libilp32/libstdc++.so.6 "$X/usr/$d/libstdc++.so"
+	# the target libraries' development files: static libraries, spec file, linker script and links to
+	# the runtime libraries in /usr/libilp32, in gcc's library directory as in Debian's cross gcc
+	# packages (libgcc-14-dev-<arch>-cross, libstdc++-14-dev-<arch>-cross), not in the tooldir:
+	# gcc reaches <tooldir>/libilp32 only as <tooldir>/lib/../libilp32, which needs <tooldir>/lib
+	for f in libgcc_s.so libatomic.a libgomp.a libgomp.spec; do cp -a "$GCCLIB/$f" "$P/usr/$GD/"; done
+	ln -s /usr/libilp32/libatomic.so.1 "$P/usr/$GD/libatomic.so"
+	ln -s /usr/libilp32/libgomp.so.1 "$P/usr/$GD/libgomp.so"
+	mkdir -p "$X/usr/$GD" "$X/usr/$T/include/c++"
+	for f in libstdc++.a libsupc++.a libstdc++fs.a libstdc++exp.a; do cp -a "$GCCLIB/$f" "$X/usr/$GD/"; done
+	ln -s /usr/libilp32/libstdc++.so.6 "$X/usr/$GD/libstdc++.so"
 	cp -a "$TC/$T/include/c++/14" "$X/usr/$T/include/c++/"
 	find "$STAGE" -name '*.la' -delete
 
@@ -245,7 +247,9 @@ manifest() {
 		echo "  binutils from apt-get source binutils=2.44-3 on the board, gcc from the same tree as the x86-hosted toolchain;"
 		echo "  host flags -g -O2, -Wl,-z,relro (Debian's for cross compilers); host binaries stripped"
 		echo "  prefix /usr, sysroot /, headers /$HDR, libraries /usr/libilp32, gcc in /usr/lib/gcc-cross/$T/14"
-		echo "  and /usr/libexec/gcc-cross/$T/14; only the -14 names (meta packages add the unversioned links)"
+		echo "  and /usr/libexec/gcc-cross/$T/14; only the -14 names (meta packages add the unversioned links);"
+		echo "  the target libraries' dev files (lib*.a, libgomp.spec, libgcc_s.so script, lib*.so links to"
+		echo "  /usr/libilp32) in /usr/lib/gcc-cross/$T/14 as Debian's cross gcc packages, no /usr/$T/libilp32"
 		echo "  target files (crt*.o, libgcc*.a, libgcov.a, headers, libstdc++/libatomic/libgomp static libraries,"
 		echo "  C++ headers) are the x86-hosted toolchain's, unchanged (fixincludes' path comments rewritten),"
 		echo "  without include/ssp (libssp, libitm are built but not packaged)"

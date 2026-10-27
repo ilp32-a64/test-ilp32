@@ -102,7 +102,7 @@ do_binutils() {
 	make -j"$J"
 	make install DESTDIR="$W/raw-binutils"
 	strip_host "$W/raw-binutils"
-	"$W/raw-binutils/usr/bin/$T-ld" --version | head -1
+	o=$("$W/raw-binutils/usr/bin/$T-ld" --version); echo "${o%%$'\n'*}"
 }
 
 do_gcc() {
