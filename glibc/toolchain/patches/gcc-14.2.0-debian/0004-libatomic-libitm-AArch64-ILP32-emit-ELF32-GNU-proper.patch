@@ -1,0 +1,94 @@
+From b4953f9e8ce8ba306547f06b090d73e04d7bc843 Mon Sep 17 00:00:00 2001
+From: liviyifan <344781483+liviyifan@users.noreply.github.com>
+Date: Wed, 28 Oct 2026 07:30:31 +0800
+Subject: [PATCH 4/4] libatomic, libitm: AArch64 ILP32: emit ELF32 GNU property
+ notes
+
+libatomic's atomic_16.S and libitm's sjlj.S have their own copy of the
+GNU_PROPERTY macro, which always wrote the ELF64 note layout (8-byte
+alignment, descriptor padded to 16 bytes). Built for ILP32 with
+-mbranch-protection=bti, atomic_16.o and sjlj.o got such a note: ld warns
+"corrupt GNU_PROPERTY_TYPE (5) size: 0x10" when libatomic.a is linked
+statically, and links with -z force-bti --fatal-warnings fail. ILP32
+objects now get the ELF32 layout, as libgcc's aarch64-asm.h: 4-byte
+alignment, a 12-byte descriptor, no padding. The shared libraries were
+not affected (ld writes their merged note itself).
+
+No change for LP64.
+
+Signed-off-by: liviyifan <344781483+liviyifan@users.noreply.github.com>
+---
+ libatomic/config/linux/aarch64/atomic_16.S | 17 ++++++++++++++++-
+ libitm/config/aarch64/sjlj.S               | 17 ++++++++++++++++-
+ 2 files changed, 32 insertions(+), 2 deletions(-)
+
+diff --git a/libatomic/config/linux/aarch64/atomic_16.S b/libatomic/config/linux/aarch64/atomic_16.S
+index 4e3fa870b..9be1b0d3e 100644
+--- a/libatomic/config/linux/aarch64/atomic_16.S
++++ b/libatomic/config/linux/aarch64/atomic_16.S
+@@ -804,7 +804,10 @@ ALIAS2 (test_and_set_16)
+ # define PAC_FLAG 0
+ #endif
+ 
+-/* Add a NT_GNU_PROPERTY_TYPE_0 note.  */
++/* Add a NT_GNU_PROPERTY_TYPE_0 note.  The notes of ELF64 objects are
++   8-byte aligned with the descriptor padded to 8 bytes, those of ELF32
++   (ILP32) objects 4-byte aligned without padding.  */
++#ifdef __LP64__
+ #define GNU_PROPERTY(type, value)	\
+   .section .note.gnu.property, "a";     \
+   .p2align 3;				\
+@@ -816,6 +819,18 @@ ALIAS2 (test_and_set_16)
+   .word 4;				\
+   .word value;				\
+   .word 0;
++#else
++#define GNU_PROPERTY(type, value)	\
++  .section .note.gnu.property, "a";     \
++  .p2align 2;				\
++  .word 4;				\
++  .word 12;				\
++  .word 5;				\
++  .asciz "GNU";				\
++  .word type;				\
++  .word 4;				\
++  .word value;
++#endif
+ 
+ #if defined(__linux__) || defined(__FreeBSD__)
+ .section .note.GNU-stack, "", %progbits
+diff --git a/libitm/config/aarch64/sjlj.S b/libitm/config/aarch64/sjlj.S
+index 6b248f7c0..7b8c27c1b 100644
+--- a/libitm/config/aarch64/sjlj.S
++++ b/libitm/config/aarch64/sjlj.S
+@@ -146,7 +146,10 @@ GTM_longjmp:
+ # define PAC_FLAG 0
+ #endif
+ 
+-/* Add a NT_GNU_PROPERTY_TYPE_0 note.  */
++/* Add a NT_GNU_PROPERTY_TYPE_0 note.  The notes of ELF64 objects are
++   8-byte aligned with the descriptor padded to 8 bytes, those of ELF32
++   (ILP32) objects 4-byte aligned without padding.  */
++#ifdef __LP64__
+ #define GNU_PROPERTY(type, value)	\
+   .section .note.gnu.property, "a";	\
+   .p2align 3;				\
+@@ -158,6 +161,18 @@ GTM_longjmp:
+   .word 4;				\
+   .word value;				\
+   .word 0;
++#else
++#define GNU_PROPERTY(type, value)	\
++  .section .note.gnu.property, "a";	\
++  .p2align 2;				\
++  .word 4;				\
++  .word 12;				\
++  .word 5;				\
++  .asciz "GNU";				\
++  .word type;				\
++  .word 4;				\
++  .word value;
++#endif
+ 
+ #if defined(__linux__) || defined(__FreeBSD__)
+ .section .note.GNU-stack, "", %progbits

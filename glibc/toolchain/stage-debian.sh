@@ -107,6 +107,11 @@ while read -r f; do
 	grep -q 'Class: *ELF32' <<< "$o" || { echo "not ELF32: $f"; exit 1; }
 	case $f in *.so*) o=$("$RE" -n "$f"); grep -q 'AArch64 feature: BTI' <<< "$o" || { echo "no BTI note: $f"; exit 1; } ;; esac
 done < <(find "$STAGE" -type f \( -name '*.so*' -o -name '*.o' \))
+# no ELF64-layout (corrupt) property note in any target object, also inside the archives
+while read -r f; do
+	o=$("$RE" -n "$f" 2>&1)
+	if grep -q 'corrupt' <<< "$o"; then echo "corrupt note in $f:"; grep 'corrupt' <<< "$o" | head -3; exit 1; fi
+done < <(find "$STAGE" -type f \( -name '*.so*' -o -name '*.o' -o -name '*.a' \) ! -path '*/usr/bin/*' ! -path '*/libexec/*')
 
 # The compiler for the board (build-debian-native.sh, built on an arm64 board; raw installs copied
 # to $BRD): host side from its raw installs, target side unchanged from the x86-hosted toolchain.

@@ -1,7 +1,7 @@
 From bbfc2069f7c44915744c37f62368647a0caca48d Mon Sep 17 00:00:00 2001
 From: liviyifan <344781483+liviyifan@users.noreply.github.com>
 Date: Wed, 28 Oct 2026 07:12:17 +0800
-Subject: [PATCH 3/3] libgomp: ILP32: keep the configured omp_nest_lock_t size
+Subject: [PATCH 3/4] libgomp: ILP32: keep the configured omp_nest_lock_t size
  (revert Debian's libgomp-omp_h-multilib)
 
 Debian's libgomp-omp_h-multilib.diff declares omp_nest_lock_t in omp.h
