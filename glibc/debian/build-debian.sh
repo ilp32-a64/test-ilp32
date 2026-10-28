@@ -7,6 +7,10 @@
 #   build-debian.sh [steps...]      steps: source kheaders configure build install (default all, in order)
 #   TC=<toolchain prefix>           cross gcc and binutils for aarch64-linux-gnu_ilp32
 #                                   (default ~/work/build/deb-toolchain/out); glibc goes into its sysroot
+#   SYSROOT=<directory>             where kheaders and install put their files instead (default
+#                                   $TC/aarch64-linux-gnu_ilp32/sysroot)
+#   KHEADERS=<directory>            kernel UAPI headers for configure --with-headers (default
+#                                   $SYSROOT/usr/include, where the kheaders step installs them)
 #   DEB_WORK=<work directory>       .dsc and orig tarball, source, build (default ~/work/debian-glibc)
 #   KREPO=<linux-ilp32 clone>       kernel for the UAPI headers (default ~/work/linux-ilp32), used at KCOMMIT
 #   J=<jobs>                        parallel make jobs (default 2)
@@ -15,7 +19,8 @@ set -euo pipefail
 R=$(dirname "$(realpath "$0")")		# this directory of test-ilp32
 T=aarch64-linux-gnu_ilp32
 TC=${TC:-$HOME/work/build/deb-toolchain/out}
-SYSROOT=$TC/$T/sysroot
+SYSROOT=${SYSROOT:-$TC/$T/sysroot}
+KHEADERS=${KHEADERS:-$SYSROOT/usr/include}
 W=${DEB_WORK:-$HOME/work/debian-glibc}
 KREPO=${KREPO:-$HOME/work/linux-ilp32}
 J=${J:-2}
@@ -120,7 +125,7 @@ do_configure() {
 		--enable-stackguard-randomization --enable-stack-protector=strong \
 		--with-pkgversion="Debian GLIBC $VERSION" --with-bugurl="http://www.debian.org/Bugs/" \
 		--with-timeoutfactor=25 --disable-mathvec \
-		--with-headers="$SYSROOT/usr/include" --enable-kernel=3.2 \
+		--with-headers="$KHEADERS" --enable-kernel=3.2 \
 		--enable-multi-arch
 	grep -E '^(config-machine|default-abi|slibdir|rtlddir|libdir|build-mathvec|enable-kernel) ' config.make || true
 }
