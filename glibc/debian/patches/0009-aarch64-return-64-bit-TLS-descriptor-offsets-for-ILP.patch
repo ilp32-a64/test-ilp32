@@ -1,0 +1,82 @@
+From 2690bdac8f8d01abdf84f8bb59c71bb817eb5064 Mon Sep 17 00:00:00 2001
+From: liviyifan <344781483+liviyifan@users.noreply.github.com>
+Date: Thu, 29 Oct 2026 07:28:06 +0800
+Subject: [PATCH 09/10] aarch64: return 64-bit TLS descriptor offsets for ILP32
+
+The TLS descriptor handlers return the offset of the variable from the
+thread pointer, and compilers use it as a 64-bit value: GCC and clang
+add it to tpidr_el0 in a 64-bit address (add x0, x19, x0 or
+ldr w0, [x1, x0]). For ILP32 _dl_tlsdesc_dynamic and
+_dl_tlsdesc_undefweak computed the offset in 32-bit registers, so an
+object below the thread pointer, such as a dynamic TLS block that
+malloc placed in the heap, came back as a large positive offset and the
+access faulted 4 GiB above the object. elf/tst-tls-ie,
+tst-tls-ie-dlmopen, tst-gnu2-tls2 and tst-tls-manydynamic crashed.
+
+Compute the pointer in 32 bits and subtract the thread pointer in 64
+bits, as musl's ILP32 port does; zero-extend the pointer that
+__tls_get_addr returns first. _dl_tlsdesc_return returns a static TLS
+offset, which is positive, and needs no change.
+
+No change for LP64.
+---
+ sysdeps/aarch64/dl-tlsdesc.S | 19 ++++++++++++++++++-
+ 1 file changed, 18 insertions(+), 1 deletion(-)
+
+diff --git a/sysdeps/aarch64/dl-tlsdesc.S b/sysdeps/aarch64/dl-tlsdesc.S
+index 6045b2e0a9..9f0d1ae6dc 100644
+--- a/sysdeps/aarch64/dl-tlsdesc.S
++++ b/sysdeps/aarch64/dl-tlsdesc.S
+@@ -22,6 +22,12 @@
+ #include <tls.h>
+ #include "tlsdesc.h"
+ 
++/* The handlers return the offset from the thread pointer in x0 as a
++   64-bit value, also for ILP32: the caller may add it to the 64-bit
++   tpidr_el0 in an address (ldr w0, [x1, x0]).  A dynamic TLS block can
++   be below the thread pointer, so the ILP32 handlers compute the
++   pointer in 32 bits and subtract the thread pointer in 64 bits.  */
++
+ #define NSAVEDQREGPAIRS	16
+ #define SAVE_Q_REGISTERS				\
+ 	stp	q0, q1,	[sp, #-32*NSAVEDQREGPAIRS]!;	\
+@@ -102,7 +108,7 @@ _dl_tlsdesc_undefweak:
+ 	PTR_ARG (0)
+ 	ldr	PTR_REG (0), [x0, #PTR_SIZE]
+ 	mrs	x1, tpidr_el0
+-	sub	PTR_REG (0), PTR_REG (0), PTR_REG (1)
++	sub	x0, x0, x1
+ 	ldr	x1, [sp], #16
+ 	cfi_adjust_cfa_offset (-16)
+ 	RET
+@@ -171,8 +177,13 @@ _dl_tlsdesc_dynamic:
+ 	cmp	PTR_REG (0), #TLS_DTV_UNALLOCATED
+ 	b.eq	2f
+ 	cfi_remember_state
++#ifdef __LP64__
+ 	sub	PTR_REG (3), PTR_REG (3), PTR_REG (4)
+ 	add	PTR_REG (0), PTR_REG (0), PTR_REG (3)
++#else
++	add	PTR_REG (0), PTR_REG (0), PTR_REG (3)
++	sub	x0, x0, x4
++#endif
+ 1:
+ 	ldp	 x3,  x4, [sp, #16]
+ 	ldp	 x1,  x2, [sp], #32
+@@ -223,7 +234,13 @@ _dl_tlsdesc_dynamic:
+ 	bl	HIDDEN_JUMPTARGET(__tls_get_addr)
+ 
+ 	mrs	x1, tpidr_el0
++#ifdef __LP64__
+ 	sub	PTR_REG (0), PTR_REG (0), PTR_REG (1)
++#else
++	/* The upper half of a returned pointer is unspecified.  */
++	mov	w0, w0
++	sub	x0, x0, x1
++#endif
+ 
+ 	RESTORE_Q_REGISTERS
+ 
+-- 
+2.43.0
+

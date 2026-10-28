@@ -1,0 +1,60 @@
+From c50cf3b9ed917658bc937dbc8b11289c4aaa4677 Mon Sep 17 00:00:00 2001
+From: liviyifan <344781483+liviyifan@users.noreply.github.com>
+Date: Thu, 29 Oct 2026 07:28:06 +0800
+Subject: [PATCH 10/10] aarch64: build tst-auditmod26, tst-auditmod27 and
+ tst-sme-signal for ILP32
+
+They did not compile with 32-bit pointers (-Werror): the audit modules
+printed a uintptr_t with %ld, and tst-sme-signal converted the 64-bit
+address of the extra context to a pointer directly. Print the cookie
+as a long int and convert the address through uintptr_t.
+
+No change for LP64.
+---
+ sysdeps/aarch64/tst-auditmod26.c | 2 +-
+ sysdeps/aarch64/tst-auditmod27.c | 2 +-
+ sysdeps/aarch64/tst-sme-signal.c | 2 +-
+ 3 files changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/sysdeps/aarch64/tst-auditmod26.c b/sysdeps/aarch64/tst-auditmod26.c
+index 1dd1412a54..80c956dccd 100644
+--- a/sysdeps/aarch64/tst-auditmod26.c
++++ b/sysdeps/aarch64/tst-auditmod26.c
+@@ -42,7 +42,7 @@ la_objopen (struct link_map *map, Lmid_t lmid, uintptr_t *cookie)
+   if (strncmp (l_name, TEST_NAME, strlen (TEST_NAME)) == 0)
+     ck = AUDIT26_COOKIE;
+   *cookie = ck;
+-  printf ("objopen: %ld, %s [cookie=%ld]\n", lmid, l_name, ck);
++  printf ("objopen: %ld, %s [cookie=%ld]\n", lmid, l_name, (long int) ck);
+   return ck == -1 ? 0 : LA_FLG_BINDFROM | LA_FLG_BINDTO;
+ }
+ 
+diff --git a/sysdeps/aarch64/tst-auditmod27.c b/sysdeps/aarch64/tst-auditmod27.c
+index 820acadb66..0572536ff9 100644
+--- a/sysdeps/aarch64/tst-auditmod27.c
++++ b/sysdeps/aarch64/tst-auditmod27.c
+@@ -43,7 +43,7 @@ la_objopen (struct link_map *map, Lmid_t lmid, uintptr_t *cookie)
+   if (strncmp (l_name, TEST_NAME, strlen (TEST_NAME)) == 0)
+     ck = AUDIT27_COOKIE;
+   *cookie = ck;
+-  printf ("objopen: %ld, %s [%ld]\n", lmid, l_name, ck);
++  printf ("objopen: %ld, %s [%ld]\n", lmid, l_name, (long int) ck);
+   return ck == -1 ? 0 : LA_FLG_BINDFROM | LA_FLG_BINDTO;
+ }
+ 
+diff --git a/sysdeps/aarch64/tst-sme-signal.c b/sysdeps/aarch64/tst-sme-signal.c
+index b4b07bcc44..3261f118ff 100644
+--- a/sysdeps/aarch64/tst-sme-signal.c
++++ b/sysdeps/aarch64/tst-sme-signal.c
+@@ -79,7 +79,7 @@ handler (int signo, siginfo_t *si, void *ctx)
+         {
+           WRITE ("found EXTRA_MAGIC\n");
+           struct { struct _aarch64_ctx h; uint64_t data; } *e = p;
+-          p = (char *)e->data;
++          p = (char *) (uintptr_t) e->data;
+           continue;
+         }
+       p = (char *)p + extension (p)->size;
+-- 
+2.43.0
+
