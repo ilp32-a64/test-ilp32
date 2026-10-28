@@ -31,7 +31,7 @@ DSC=glibc_$DEB_VERSION.dsc
 DSC_SHA256=0915324aa646bb99abfaa9aa6ecb734b30babd28454a3e51f3152912370fbd3e
 MIRROR=https://deb.debian.org/debian/pool/main/g/glibc
 KCOMMIT=64b6f40074
-VERSION=$DEB_VERSION+ilp32a64.1
+VERSION=$DEB_VERSION+ilp32a64.2
 
 SRC=$W/src
 B=$W/build

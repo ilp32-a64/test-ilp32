@@ -2,7 +2,7 @@
 # Install trees for the debian session's ILP32 packages from the Debian-based toolchain
 # (build-debian.sh, ../debian/build-debian.sh): one / tree per package under $STAGE/<package>/,
 # plus MANIFEST and Debian's copyright and changelog files under $STAGE/doc/.
-#   PARTS=runtime|compiler STAGE=<new directory> stage-debian.sh
+#   PARTS=runtime|compiler|glibc STAGE=<new directory> stage-debian.sh
 # A hand-off is a fixed snapshot: STAGE must not exist yet (e.g. stage-runtime-<date>, stage-native-<date>).
 #
 # PARTS=runtime:
@@ -13,6 +13,10 @@
 #   linux-libc-dev-ilp32  the kernel UAPI headers (headers_install of $KCOMMIT) in
 #                         usr/aarch64-linux-gnu_ilp32/include
 #   libgcc-s1-ilp32 libstdc++6-ilp32 libatomic1-ilp32 libgomp1-ilp32   usr/libilp32/<soname> + library
+# PARTS=glibc:
+#   libc6-ilp32, libc6-dev-ilp32 as for runtime, from the release build of ../debian/check-debian-clean.sh
+#                         (a fresh clean chroot on an arm64 Debian 13 board, its testsuite run included):
+#                         GLIBC_REL=<its output directory> with raw-glibc/, tests.sum, dpkg-l.txt, ...
 # PARTS=compiler:
 #   binutils-aarch64-linux-gnu-ilp32, gcc-14-aarch64-linux-gnu-ilp32, g++-14-aarch64-linux-gnu-ilp32
 #                         the compiler for the board, from build-debian-native.sh's raw installs ($BRD)
@@ -26,7 +30,7 @@ T=aarch64-linux-gnu_ilp32
 TS=$TC/$T/sysroot
 GCCLIB=$TC/$T/libilp32
 STAGE=${STAGE:?set STAGE to a new directory}
-PARTS=${PARTS:?set PARTS to runtime or compiler}
+PARTS=${PARTS:?set PARTS to runtime, compiler or glibc}
 GLIBC_W=${DEB_WORK:-$HOME/work/debian-glibc}
 GCC_SRC=${GCC_SRC:-$HOME/work/debian-gcc/gcc-14.2.0}
 GCC_PKG=${GCC_PKG:-$HOME/work/debian-gcc/pkg}
@@ -34,21 +38,24 @@ BU_SRC=$TOP/debsrc/binutils
 KTREE=$GLIBC_W/linux		# detached worktree of linux-ilp32 at KCOMMIT (glibc's kheaders step)
 KCOMMIT=64b6f40074
 HDR=usr/$T/include
-V_GLIBC=2.41-12+deb13u4+ilp32a64.1
+V_GLIBC=2.41-12+deb13u4+ilp32a64.1	# runtime, compiler: the released glibc
+V_GLIBC_NEW=2.41-12+deb13u4+ilp32a64.2	# glibc: the new build (TLS descriptor fix)
 V_GCC=14.2.0-19+ilp32a64.1		# the GCC runtime packages
 V_GCC_CC=14.2.0-19+ilp32a64.2		# the compiler packages (omp.h fixed); runtime unchanged
 V_BU=2.44-3+ilp32a64.1
 V_LINUX=6.12.114-1+ilp32a64.2
-# the toolchain must be the build of the packages' version: gcc -v shows it (--with-pkgversion)
-o=$("$TC/bin/$T-gcc" -v 2>&1)
-case $PARTS in
-runtime) want=$V_GCC ;;
-compiler) want=$V_GCC_CC ;;
-esac
-grep -qF "(Debian $want)" <<< "$o" || { echo "$TC is not the gcc $want build"; exit 1; }
+case $PARTS in runtime|compiler|glibc) ;; *) echo "PARTS must be runtime, compiler or glibc"; exit 1 ;; esac
+# the toolchain must be the build of the packages' version: gcc -v shows it (--with-pkgversion); for
+# glibc only its binutils are used (the glibc build is the board's)
+if [ "$PARTS" != glibc ]; then
+	o=$("$TC/bin/$T-gcc" -v 2>&1)
+	case $PARTS in
+	runtime) want=$V_GCC ;;
+	compiler) want=$V_GCC_CC ;;
+	esac
+	grep -qF "(Debian $want)" <<< "$o" || { echo "$TC is not the gcc $want build"; exit 1; }
+fi
 RE=$TC/bin/$T-readelf
-
-case $PARTS in runtime|compiler) ;; *) echo "PARTS must be runtime or compiler"; exit 1 ;; esac
 [ ! -e "$STAGE" ] || { echo "$STAGE exists: a hand-off is not changed afterwards, use a new directory"; exit 1; }
 mkdir -p "$STAGE/doc"
 W=$(mktemp -d)
@@ -99,6 +106,72 @@ gcc_lib libatomic1-ilp32 libatomic.so.1
 gcc_lib libgomp1-ilp32 libgomp.so.1
 fi
 
+if [ "$PARTS" = glibc ]; then
+	GR=${GLIBC_REL:?set GLIBC_REL to the output directory of check-debian-clean.sh}
+	RG=$GR/raw-glibc
+	for f in raw-glibc tests.sum dpkg-l.txt compare.txt; do
+		[ -e "$GR/$f" ] || { echo "no $f in $GR"; exit 1; }
+	done
+	o=$(strings -a "$RG/libilp32/libc.so.6")
+	grep -qF "(Debian GLIBC $V_GLIBC_NEW)" <<< "$o" || { echo "$RG is not the glibc $V_GLIBC_NEW build"; exit 1; }
+	# glibc installs no kernel headers (they come from linux-libc-dev-ilp32)
+	for d in linux asm asm-generic; do [ ! -e "$RG/usr/include/$d" ] || { echo "kernel headers in $RG"; exit 1; }; done
+	P=$STAGE/libc6-ilp32
+	mkdir -p "$P/usr/lib" "$P/usr/libilp32/gconv"
+	cp -a "$RG/lib/ld-linux-aarch64_ilp32.so.1" "$P/usr/lib/"
+	cp -a "$RG"/libilp32/*.so* "$P/usr/libilp32/"
+	cp -a "$RG"/usr/libilp32/gconv/*.so "$RG"/usr/libilp32/gconv/gconv-modules* "$P/usr/libilp32/gconv/"
+	P=$STAGE/libc6-dev-ilp32
+	mkdir -p "$P/$HDR" "$P/usr/libilp32"
+	cp -a "$RG/usr/include/." "$P/$HDR/"
+	cp -a "$RG"/usr/libilp32/*.o "$RG"/usr/libilp32/*.a "$P/usr/libilp32/"
+	for f in "$RG"/usr/libilp32/*.so; do
+		if [ -L "$f" ]; then
+			ln -s "$(basename "$(readlink "$f")")" "$P/usr/libilp32/$(basename "$f")"
+		else
+			sed 's|\([ (]\)/libilp32/|\1/usr/libilp32/|g' "$f" > "$P/usr/libilp32/$(basename "$f")"
+		fi
+	done
+	if grep -l '[ (]/libilp32/' "$P"/usr/libilp32/*.so 2>/dev/null; then echo "linker script with /libilp32"; exit 1; fi
+	# against the released .1 trees: the same file lists and headers; the code differs only where the
+	# patches since .1 changed it (and the known scheduling tie of the x86-hosted .1 build in inet_ntop)
+	RT=${RUNTIME_STAGE:-$TOP/stage-runtime-20261027}
+	OC=$TC/bin/$T-objcopy
+	norm() { "$OC" --strip-all --remove-section=.comment --remove-section=.note.gnu.build-id \
+		--remove-section=.gnu_debuglink "$1" "$2" 2> /dev/null; }
+	CODECHECK=$W/codecheck
+	for p in libc6-ilp32 libc6-dev-ilp32; do
+		diff <(cd "$RT/$p" && find . | sort) <(cd "$STAGE/$p" && find . | sort) ||
+			{ echo "$p: file list differs from the released $V_GLIBC"; exit 1; }
+	done
+	diff -r "$RT/libc6-dev-ilp32/$HDR" "$STAGE/libc6-dev-ilp32/$HDR" > /dev/null ||
+		{ echo "headers differ from the released $V_GLIBC"; exit 1; }
+	echo "  file lists and headers: identical to the released $V_GLIBC" >> "$CODECHECK"
+	n=0 d=""
+	while read -r f; do
+		a=$RT/$f b=$STAGE/$f
+		n=$((n+1))
+		cmp -s "$a" "$b" && continue
+		o=$(file -b "$b")
+		case $o in
+		ELF*) norm "$a" "$W/a" && norm "$b" "$W/b" && cmp -s "$W/a" "$W/b" && continue ;;
+		"current ar archive"*)
+			rm -rf "$W/xa" "$W/xb"; mkdir "$W/xa" "$W/xb"
+			(cd "$W/xa" && ar x "$a"); (cd "$W/xb" && ar x "$b")
+			m=""
+			for x in $(ls "$W/xa"); do
+				norm "$W/xa/$x" "$W/a"; norm "$W/xb/$x" "$W/b"; cmp -s "$W/a" "$W/b" || m="$m,$x"
+			done
+			[ -z "$m" ] && continue
+			d="$d ${f}[${m#,}]"; continue ;;
+		esac
+		d="$d $f"
+	done < <(cd "$RT" && find libc6-ilp32 libc6-dev-ilp32 -type f ! -path "*/$HDR/*" | sort)
+	echo "  libraries and objects: $n compared with the released $V_GLIBC; code differs in:" >> "$CODECHECK"
+	for x in $d; do echo "    $x" >> "$CODECHECK"; done
+	cat "$CODECHECK"
+fi
+
 # every target ELF file is ELF32; every target shared object has the BTI property
 while read -r f; do
 	"$RE" -h "$f" > /dev/null 2>&1 || continue		# linker scripts
@@ -109,7 +182,8 @@ while read -r f; do
 done < <(find "$STAGE" -type f \( -name '*.so*' -o -name '*.o' \))
 # no ELF64-layout (corrupt) property note in any target object, also inside the archives
 while read -r f; do
-	o=$("$RE" -n "$f" 2>&1)
+	# (linker scripts such as libc.so are not ELF: skip them, but not a failing ELF file)
+	o=$("$RE" -n "$f" 2>&1) || { "$RE" -h "$f" > /dev/null 2>&1 || continue; echo "readelf -n failed: $f"; exit 1; }
 	if grep -q 'corrupt' <<< "$o"; then echo "corrupt note in $f:"; grep 'corrupt' <<< "$o" | head -3; exit 1; fi
 done < <(find "$STAGE" -type f \( -name '*.so*' -o -name '*.o' -o -name '*.a' \) ! -path '*/usr/bin/*' ! -path '*/libexec/*')
 
@@ -206,11 +280,75 @@ if grep -rl -a -e /home/ -e ubuntu-VirtualBox -e Ubuntu "$STAGE"; then echo "bui
 
 cp "$GLIBC_W/src/debian/copyright" "$STAGE/doc/glibc.copyright"
 cp "$GLIBC_W/src/debian/changelog" "$STAGE/doc/glibc.changelog"
-cp "$GCC_PKG/debian/copyright" "$STAGE/doc/gcc-14.copyright"
-cp "$GCC_PKG/debian/changelog" "$STAGE/doc/gcc-14.changelog"
-cp "$BU_SRC/debian/copyright" "$STAGE/doc/binutils.copyright"
-cp "$BU_SRC/debian/changelog" "$STAGE/doc/binutils.changelog"
-cp "$GCC_SRC/COPYING.RUNTIME" "$STAGE/doc/gcc-COPYING.RUNTIME"
+if [ "$PARTS" != glibc ]; then
+	cp "$GCC_PKG/debian/copyright" "$STAGE/doc/gcc-14.copyright"
+	cp "$GCC_PKG/debian/changelog" "$STAGE/doc/gcc-14.changelog"
+	cp "$BU_SRC/debian/copyright" "$STAGE/doc/binutils.copyright"
+	cp "$BU_SRC/debian/changelog" "$STAGE/doc/binutils.changelog"
+	cp "$GCC_SRC/COPYING.RUNTIME" "$STAGE/doc/gcc-COPYING.RUNTIME"
+fi
+
+manifest_glibc() {
+	local p
+	echo "# AArch64 ILP32 glibc for Debian 13 from Debian 13 sources: install trees (<package>/)"
+	echo "date: $(date -u +%F)   test-ilp32 $(git -C "$IT" log -1 --format=%h) glibc/toolchain/stage-debian.sh PARTS=glibc"
+	echo
+	echo "versions:"
+	echo "  libc6-ilp32, libc6-dev-ilp32  $V_GLIBC_NEW"
+	echo "  (the other packages are released and unchanged: linux-libc-dev-ilp32 $V_LINUX, the GCC runtime"
+	echo "  $V_GCC, gcc-14/g++-14 $V_GCC_CC, binutils $V_BU)"
+	echo
+	echo "changes since $V_GLIBC:"
+	echo "  - aarch64: return 64-bit TLS descriptor offsets for ILP32 (glibc-ilp32 2690bdac8f, patch 0009):"
+	echo "    _dl_tlsdesc_dynamic and _dl_tlsdesc_undefweak computed the thread pointer offset in 32-bit"
+	echo "    registers; compilers use it as a 64-bit value, so __thread variables of dlopen'ed libraries"
+	echo "    with dynamic TLS below the thread pointer faulted"
+	echo "  - aarch64: tst-auditmod26, tst-auditmod27 and tst-sme-signal build for ILP32 (c50cf3b9ed,"
+	echo "    patch 0010; tests only)"
+	echo
+	echo "source: glibc_2.41-12+deb13u4.dsc  $(sha256sum "$GLIBC_W/glibc_2.41-12+deb13u4.dsc" | cut -d' ' -f1)"
+	echo "patches: Debian's 80 + test-ilp32 glibc/debian/patches/0001-0010"
+	echo "  (= glibc-ilp32 ilp32-2.41 6a0b8e3665..c50cf3b9ed)"
+	echo "kernel UAPI headers: the released linux-libc-dev-ilp32 $V_LINUX (linux-ilp32 $KCOMMIT)"
+	echo "configure and flags: test-ilp32 glibc/debian/build-debian.sh (Debian's build.mk options; CC"
+	echo "  $T-gcc -mbranch-protection=bti -U_FILE_OFFSET_BITS -U_TIME_BITS; CFLAGS and ASFLAGS -pipe -O2 -g"
+	echo "  + prefix maps)"
+	echo
+	echo "deviations from Debian's build: as for the released $V_GLIBC (MANIFEST of stage-runtime-20261027):"
+	echo "  the cross triplet aarch64-linux-gnu_ilp32 and its layout, -mbranch-protection=bti, no memory"
+	echo "  tagging, no libmvec, separate ILP32 headers, only the ILP32 libraries"
+	echo
+	echo "release build: test-ilp32 glibc/debian/check-debian-clean.sh in a fresh clean chroot (pristine"
+	echo "  Debian 13 arm64 buildd base, thrown away afterwards) on an arm64 Debian 13 board: glibc's"
+	echo "  Build-Depends from Debian, the released ILP32 compiler $V_GCC_CC, binutils $V_BU and"
+	echo "  linux-libc-dev-ilp32 $V_LINUX from the signed repository (keyring fingerprint"
+	echo "  D5723B340CBE7C99209182439C6A5E841E289B20); built and tested as an unprivileged user"
+	echo "  (installed packages list below)"
+	echo "  target code checks against the released $V_GLIBC:"
+	cat "$CODECHECK"
+	echo
+	echo "testsuite of the release build (make check, natively on the board, in the same chroot):"
+	grep -E '^[A-Z]+:' "$GR/tests.sum" | cut -d: -f1 | sort | uniq -c | sed 's/^/  /'
+	grep -E '^(FAIL|XPASS|ERROR|UNRESOLVED):' "$GR/tests.sum" | sed 's/^/  /'
+	echo "  elf/tst-audit23: a Debian xfail on every architecture"
+	echo "  string/tst-memmove-overflow: GCC and clang sign-extend a constant offset of 2 GiB or more in an"
+	echo "    address (objects larger than PTRDIFF_MAX are not supported); passes with the size as a"
+	echo "    run-time value, memmove itself is fine"
+	echo "  elf/tst-protected1a, tst-protected1b XPASS: Debian xfails on every architecture"
+	echo
+	echo "doc/: Debian's copyright and changelog of glibc"
+	for p in "$STAGE"/*-ilp32; do
+		echo
+		echo "## $(basename "$p")"
+		(cd "$p" && find . \( -type f -o -type l \) | sed 's|^\./|/|' | LC_ALL=C sort | while read -r f; do
+			if [ -L ".$f" ]; then echo "  $f -> $(readlink ".$f")"
+			else echo "  $f $(sha256sum ".$f" | cut -c1-16)"; fi
+		done)
+	done
+	echo
+	echo "## build environment: packages installed in the clean chroot (dpkg-query)"
+	sed 's/^/  /' "$GR/dpkg-l.txt"
+}
 
 manifest() {
 	local p
@@ -331,5 +469,5 @@ manifest() {
 		sed 's/^/  /' "$CLEAN/dpkg-l.txt"
 	fi
 }
-manifest > "$STAGE/MANIFEST"
+if [ "$PARTS" = glibc ]; then manifest_glibc > "$STAGE/MANIFEST"; else manifest > "$STAGE/MANIFEST"; fi
 for p in "$STAGE"/*-ilp32; do echo "$(basename "$p"): $(find "$p" \( -type f -o -type l \) | wc -l) files"; done

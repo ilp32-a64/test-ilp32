@@ -1,15 +1,18 @@
 #!/bin/bash
-# glibc's testsuite for the released AArch64 ILP32 glibc (2.41-12+deb13u4+ilp32a64.1), run natively on an
+# Release build and testsuite of the AArch64 ILP32 glibc (build-debian.sh's version), natively on an
 # arm64 Debian 13 system with an ILP32 kernel, in a fresh clean chroot (../toolchain/clean-chroot.sh):
 # glibc's Build-Depends from Debian, the released ILP32 compiler, binutils and headers from the signed
 # repository, then build-debian.sh (Debian's source, patches and options, as for the release) and
-# "make check" as an unprivileged user. Also compares the rebuilt libraries with the released packages'
-# (code and data; debug info, build ids and .comment left out). The chroot is thrown away afterwards.
+# "make check" as an unprivileged user. Also compares the libraries with the released packages' (code and
+# data; debug info, build ids and .comment left out). The chroot is thrown away afterwards.
 #   check-debian-clean.sh                     on the board (as root), in $W
 #   check-debian-clean.sh inner               inside the chroot (called by the first form)
 #   $W/in/ilp32-a64-archive-keyring_*.deb      the repository's keyring (fingerprint checked)
 #   $W/in/glibc-debian/                        this directory of test-ilp32 (build-debian.sh, patches/)
-# Output: $W/glibc-check-out/: build and check logs, tests.sum, failures, compare.txt, dpkg-l.txt
+#   OUT=<new directory>                        output (default $W/glibc-check-out)
+# Output: build and check logs, tests.sum, failures, compare.txt, dpkg-l.txt, raw-glibc/ (make install
+# DESTDIR: lib/ (rtlddir), libilp32/ (slibdir), usr/include, usr/libilp32; the input of
+# ../toolchain/stage-debian.sh PARTS=glibc)
 set -euo pipefail
 W=/srv/build/compilibary
 T=aarch64-linux-gnu_ilp32
@@ -28,7 +31,7 @@ J=${J:-4}
 
 if [ "${1:-}" != inner ]; then
 	C=$W/fresh/$NAME
-	O=$W/glibc-check-out
+	O=${OUT:-$W/glibc-check-out}
 	KEYRING_DEB=$W/in/ilp32-a64-archive-keyring_2026.10.24_all.deb
 	[ -f "$KEYRING_DEB" ] && [ -x "$W/in/glibc-debian/build-debian.sh" ] || { echo "missing inputs in $W/in"; exit 1; }
 	[ ! -e "$O" ] || { echo "$O exists"; exit 1; }
@@ -95,6 +98,7 @@ rc=$?
 set -e
 cp -a /build/w/logs "$O/build-logs"
 [ $rc -eq 0 ] || { echo "build failed"; exit 1; }
+cp -a /build/install "$O/raw-glibc"
 cp /build/w/src/debian/testsuite-xfail-debian.mk "$O/" || echo "no testsuite-xfail-debian.mk"
 
 # the rebuilt files against the released packages' (rtlddir /lib and slibdir /libilp32 are under /usr in
@@ -151,5 +155,5 @@ else
 	find /build/w/build/glibc -name '*.test-result' -exec cat {} + | grep -E '^[A-Z]+:' | sort > "$O/tests.sum"
 fi
 grep -E '^(FAIL|XPASS|ERROR|UNRESOLVED):' "$O/tests.sum" | sort > "$O/failures.txt" || true
-awk -F: '{print $1}' "$O/tests.sum" | sort | uniq -c | tee "$O/summary.txt"
+grep -E '^[A-Z]+:' "$O/tests.sum" | cut -d: -f1 | sort | uniq -c | tee "$O/summary.txt"
 log "done"
