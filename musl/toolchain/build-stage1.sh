@@ -1,6 +1,7 @@
 #!/bin/bash
 # AArch64 ILP32 musl cross toolchain, stage 1: binutils 2.44 + GCC 14.3.0 (C only, no C library),
-# the versions and patches of OpenWrt 25.12 (toolchain/binutils, toolchain/gcc patches-14.x).
+# the versions and patches of OpenWrt 25.12 (toolchain/binutils, toolchain/gcc patches-14.x), then the
+# ILP32 fixes in patches/<gcc version>/ (also carried by openwrt-ilp32).
 #
 #   build-stage1.sh
 #
@@ -81,6 +82,9 @@ do_unpack() {
 	tar -C "$SRC" -xf "$SRC/$GCC.tar.xz"
 	apply_patches "$SRC/$BINUTILS" "$SRC/openwrt/toolchain/binutils/patches/${BINUTILS#binutils-}"
 	apply_patches "$SRC/$GCC" "$SRC/openwrt/toolchain/gcc/patches-14.x"
+	# ILP32 fixes that upstream OpenWrt does not have: the libgcc unwinder for frames with signed return
+	# addresses (openwrt-ilp32 toolchain/gcc/patches-14.x/990)
+	apply_patches "$SRC/$GCC" "$R/patches/$GCC"
 	# as OpenWrt toolchain/gcc/common.mk: no multilib OS directories, target libraries in lib/
 	# (for ILP32 instead of ../libilp32, the musl convention)
 	sed -i 's,^MULTILIB_OSDIRNAMES,# MULTILIB_OSDIRNAMES,' "$SRC/$GCC"/gcc/config/*/t-*
