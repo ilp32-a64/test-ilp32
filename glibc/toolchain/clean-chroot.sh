@@ -4,7 +4,8 @@
 # thrown away afterwards.
 #   clean-chroot.sh base                      create base/trixie-arm64-buildd.tar.zst (+ .sha256, .dpkg-l)
 #   clean-chroot.sh fresh <name>              unpack a fresh copy to fresh/<name> (checks the base's sha256)
-#   clean-chroot.sh run <name> <cmd...>       run a command in it (/proc, /dev, /dev/pts mounted meanwhile)
+#   clean-chroot.sh run <name> <cmd...>       run a command in it (/proc, /dev, /dev/pts and a tmpfs on
+#                                             /dev/shm mounted meanwhile, as sbuild does)
 #   clean-chroot.sh destroy <name>            unmount and delete fresh/<name>
 set -euo pipefail
 W=/srv/build/compilibary
@@ -14,19 +15,21 @@ MIRROR=http://deb.debian.org/debian
 mounted() { local o; o=$(findmnt -rn -o TARGET); grep -qx "$1" <<< "$o"; }	# (no pipe: pipefail)
 umount_all() { # <chroot>: never lazily (that would cut /dev and /proc away from a running user)
 	local m
-	for m in "$1/dev/pts" "$1/dev" "$1/proc"; do
+	for m in "$1/dev/shm" "$1/dev/pts" "$1/dev" "$1/proc"; do
 		if mounted "$m"; then umount "$m" || { echo "cannot unmount $m (in use)"; return 1; }; fi
 	done
 }
 run_in() { # <chroot> <cmd...>: one run per chroot at a time
 	local c=$1 rc m; shift
-	for m in "$c/proc" "$c/dev" "$c/dev/pts"; do
+	for m in "$c/proc" "$c/dev" "$c/dev/pts" "$c/dev/shm"; do
 		if mounted "$m"; then echo "$c is in use by another run ($m is mounted)"; return 1; fi
 	done
 	trap "umount_all '$c'" EXIT
 	mount -t proc proc "$c/proc"
 	mount --bind /dev "$c/dev"
 	mount --bind /dev/pts "$c/dev/pts"
+	# the bind mount of /dev does not carry the host's /dev/shm tmpfs: an own one, writable by all
+	mount -t tmpfs -o mode=1777,nosuid,nodev tmpfs "$c/dev/shm"
 	set +e
 	chroot "$c" /usr/bin/env -i HOME=/root LANG=C.UTF-8 TERM=dumb \
 		PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin "$@"
