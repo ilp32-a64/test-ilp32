@@ -19,12 +19,12 @@ W=/srv/build/compilibary
 T=aarch64-linux-gnu_ilp32
 H=aarch64-linux-gnu
 NAME=gcc-clean
-GCC_COMMIT=b4953f9e8		# debian-gcc branch ilp32: Debian's patches, the omp.h revert, 4 ILP32 patches
+GCC_COMMIT=b7b3a9073		# debian-gcc branch ilp32: Debian's patches, the omp.h revert, 5 ILP32 patches
 FPR=D5723B340CBE7C99209182439C6A5E841E289B20
 # the released ILP32 packages the build depends on (debian's repository, versions pinned)
 ILP32_DEPS="binutils-aarch64-linux-gnu-ilp32=2.44-3+ilp32a64.1 libc6-ilp32=2.41-12+deb13u4+ilp32a64.1
 	libc6-dev-ilp32=2.41-12+deb13u4+ilp32a64.1 linux-libc-dev-ilp32=6.12.114-1+ilp32a64.2"
-GCC_PKGVERSION="Debian 14.2.0-19+ilp32a64.2"
+GCC_PKGVERSION="Debian 14.2.0-19+ilp32a64.4"
 BUGURL=https://github.com/ilp32-a64/debian-ilp32/issues
 HDRDIR=/usr/$T/include
 J=${J:-4}
@@ -41,6 +41,8 @@ if [ "${1:-}" != inner ]; then
 	grep -q '_x\[@OMP_NEST_LOCK_SIZE@\]' <<< "$o" || { echo "$GCC_TAR: omp.h.in without the revert"; exit 1; }
 	o=$(tar -xJOf "$GCC_TAR" gcc-14.2.0/libatomic/config/linux/aarch64/atomic_16.S)
 	grep -q '\.word 12;' <<< "$o" || { echo "$GCC_TAR: atomic_16.S without the ELF32 note"; exit 1; }
+	o=$(tar -xJOf "$GCC_TAR" gcc-14.2.0/config/futex.m4)
+	grep -q 'define SYS_futex SYS_futex_time64' <<< "$o" || { echo "$GCC_TAR: futex.m4 without SYS_futex_time64"; exit 1; }
 	[ ! -e "$O" ] || { echo "$O exists"; exit 1; }
 	mkdir -p "$O"
 	"$W/clean-chroot.sh" fresh $NAME
@@ -132,6 +134,14 @@ printf '%s\n' '#include <omp.h>' \
 	"_Static_assert (sizeof (omp_depend_t) == ${n[OMP_DEPEND_KIND]}, \"omp_depend_t size\");" > /build/omp.c
 /build/raw-gcc/usr/bin/$T-gcc-14 -fopenmp -fsyntax-only /build/omp.c
 echo "omp.h matches libgomp's configure: omp_lock_t ${n[OMP_LOCK_SIZE]}/${n[OMP_LOCK_ALIGN]}, omp_nest_lock_t ${n[OMP_NEST_LOCK_SIZE]}/${n[OMP_NEST_LOCK_ALIGN]}, omp_depend_t ${n[OMP_DEPEND_KIND]}" | tee /build/omp-check.txt
+# the futex runtime (glibc ILP32 has only SYS_futex_time64): libgomp's config/linux, libitm's futex code,
+# libstdc++'s futex support
+grep -qx 'config_path = linux posix' "$mk" || { echo "libgomp is not configured with config/linux"; exit 1; }
+grep -q '^config_path = .*linux' "$B/$T/libitm/Makefile" || { echo "libitm is configured without futex"; exit 1; }
+cfg=$(find /build/raw-gcc -path "*/$T/bits/c++config.h")
+[ "$(wc -l <<< "$cfg")" = 1 ] && grep -qx '#define _GLIBCXX_HAVE_LINUX_FUTEX 1' "$cfg" \
+	|| { echo "libstdc++ without _GLIBCXX_HAVE_LINUX_FUTEX"; exit 1; }
+echo "futex: libgomp config/linux, libitm config/linux, libstdc++ _GLIBCXX_HAVE_LINUX_FUTEX" | tee -a /build/omp-check.txt
 
 # strip the arm64 host binaries; the packaged host programs hold no build path
 find /build/raw-gcc -type f \( -perm -u+x -o -name '*.so' \) -print0 | while IFS= read -r -d '' x; do
