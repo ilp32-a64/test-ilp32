@@ -18,8 +18,11 @@
 #                         (a fresh clean chroot on an arm64 Debian 13 board, its testsuite run included):
 #                         GLIBC_REL=<its output directory> with raw-glibc/, tests.sum, dpkg-l.txt, ...
 # PARTS=compiler:
-#   binutils-aarch64-linux-gnu-ilp32, gcc-14-aarch64-linux-gnu-ilp32, g++-14-aarch64-linux-gnu-ilp32
-#                         the compiler for the board, from build-debian-native.sh's raw installs ($BRD)
+#   gcc-14-aarch64-linux-gnu-ilp32, g++-14-aarch64-linux-gnu-ilp32
+#                         the compiler for the board, from the release build of build-debian-clean.sh ($CLEAN)
+#   libstdc++6-ilp32 libgomp1-ilp32   the runtime libraries that changed with it (the futex_time64
+#                         fallback), from the same build; libgcc-s1-ilp32 and libatomic1-ilp32 must have
+#                         the released runtime's code and are not part of the hand-off
 # The split is the one of ilp32-issues/d13-gcc/build.sh (do_stage), so no file moves between packages.
 # Target files are not stripped (debian's packaging strips them); the board's host binaries are.
 set -euo pipefail
@@ -40,8 +43,10 @@ KCOMMIT=64b6f40074
 HDR=usr/$T/include
 V_GLIBC=2.41-12+deb13u4+ilp32a64.1	# runtime, compiler: the released glibc
 V_GLIBC_NEW=2.41-12+deb13u4+ilp32a64.2	# glibc: the new build (TLS descriptor fix)
-V_GCC=14.2.0-19+ilp32a64.1		# the GCC runtime packages
-V_GCC_CC=14.2.0-19+ilp32a64.2		# the compiler packages (omp.h fixed); runtime unchanged
+V_GCC=14.2.0-19+ilp32a64.1		# the released GCC runtime packages (libgcc-s1, libatomic1 stay at it)
+V_GCC_RT=14.2.0-19+ilp32a64.2		# libstdc++6, libgomp1: futex_time64 fallback (ABI change)
+V_GCC_CC=14.2.0-19+ilp32a64.4		# the compiler packages (.3 was a repack of .2, never published)
+V_GCC_CC_GLIBC=14.2.0-19+ilp32a64.2	# the released compiler the glibc release build used
 V_BU=2.44-3+ilp32a64.1
 V_LINUX=6.12.114-1+ilp32a64.2
 case $PARTS in runtime|compiler|glibc) ;; *) echo "PARTS must be runtime, compiler or glibc"; exit 1 ;; esac
@@ -227,9 +232,20 @@ if [ "$PARTS" = compiler ]; then
 	ln -s /usr/libilp32/libstdc++.so.6 "$X/usr/$GD/libstdc++.so"
 	cp -a "$R/$T/include/c++/14" "$X/usr/$T/include/c++/"
 	find "$STAGE" -name '*.la' -delete
+	# the runtime libraries that changed (libstdc++6-ilp32, libgomp1-ilp32 $V_GCC_RT)
+	for p in "libstdc++6-ilp32 libstdc++.so.6" "libgomp1-ilp32 libgomp.so.1"; do
+		set -- $p
+		real=$(readlink -f "$L/$2")
+		mkdir -p "$STAGE/$1/usr/libilp32"
+		cp -a "$real" "$STAGE/$1/usr/libilp32/"
+		ln -s "$(basename "$real")" "$STAGE/$1/usr/libilp32/$2"
+		o=$("$RE" -h "$real"); grep -q 'Class: *ELF32' <<< "$o" || { echo "not ELF32: $real"; exit 1; }
+		o=$("$RE" -n "$real"); grep -q 'AArch64 feature: BTI' <<< "$o" || { echo "no BTI note: $real"; exit 1; }
+		if grep -q 'corrupt' <<< "$o"; then echo "corrupt note in $real"; exit 1; fi
+	done
 
-	# the target code is the released runtime's (.1, stage-runtime-20261027) and the x86-hosted
-	# toolchain's: identical except debug info, build-id and .comment (the version string)
+	# the target code against the released runtime (.1, stage-runtime-20261027) and the x86-hosted
+	# toolchain's build of the same source: identical except debug info, build-id and .comment
 	RT=${RUNTIME_STAGE:-$TOP/stage-runtime-20261027}
 	OC=$TC/bin/$T-objcopy
 	samecode() { # <a> <b>
@@ -238,10 +254,20 @@ if [ "$PARTS" = compiler ]; then
 		cmp -s "$W/a" "$W/b"
 	}
 	CODECHECK=$W/codecheck
-	for f in libgcc-s1-ilp32/usr/libilp32/libgcc_s.so.1 libstdc++6-ilp32/usr/libilp32/libstdc++.so.6.0.33 \
-		libatomic1-ilp32/usr/libilp32/libatomic.so.1.2.0 libgomp1-ilp32/usr/libilp32/libgomp.so.1.0.0; do
+	for f in libgcc-s1-ilp32/usr/libilp32/libgcc_s.so.1 libatomic1-ilp32/usr/libilp32/libatomic.so.1.2.0; do
 		samecode "$RT/$f" "$L/$(basename "$f")" || { echo "code differs from the released runtime: $f"; exit 1; }
-		echo "  $(basename "$f"): same code as the released runtime $V_GCC" >> "$CODECHECK"
+		echo "  $(basename "$f"): same code as the released runtime $V_GCC (package stays at $V_GCC)" >> "$CODECHECK"
+	done
+	# the changed libraries: the x86-hosted build's code, and the released runtime's exported symbols
+	# (with versions) all still there
+	syms() { "$TC/bin/$T-nm" -D --defined-only --with-symbol-versions "$1" | awk '{print $NF}' | LC_ALL=C sort -u; }
+	for f in libstdc++.so.6.0.33 libgomp.so.1.0.0; do
+		samecode "$TC/$T/libilp32/$f" "$L/$f" || { echo "code differs from the x86-hosted toolchain: $f"; exit 1; }
+		o=$(find "$RT" -name "$f")
+		syms "$o" > "$W/old.syms"; syms "$L/$f" > "$W/new.syms"
+		[ -z "$(LC_ALL=C comm -23 "$W/old.syms" "$W/new.syms")" ] || { echo "$f: symbols of $V_GCC missing"; exit 1; }
+		echo "  $f ($V_GCC_RT): same code as the x86-hosted toolchain's build; exported symbols $(wc -l < "$W/old.syms") -> $(wc -l < "$W/new.syms"), none removed" >> "$CODECHECK"
+		LC_ALL=C comm -13 "$W/old.syms" "$W/new.syms" | sed 's/^/    + /' >> "$CODECHECK"
 	done
 	for f in libatomic.a libgomp.a libstdc++.a libsupc++.a libstdc++fs.a libstdc++exp.a; do
 		samecode "$TC/$T/libilp32/$f" "$L/$f" || { echo "code differs from the x86-hosted toolchain: $f"; exit 1; }
@@ -296,7 +322,7 @@ manifest_glibc() {
 	echo "versions:"
 	echo "  libc6-ilp32, libc6-dev-ilp32  $V_GLIBC_NEW"
 	echo "  (the other packages are released and unchanged: linux-libc-dev-ilp32 $V_LINUX, the GCC runtime"
-	echo "  $V_GCC, gcc-14/g++-14 $V_GCC_CC, binutils $V_BU)"
+	echo "  $V_GCC, gcc-14/g++-14 $V_GCC_CC_GLIBC, binutils $V_BU)"
 	echo
 	echo "changes since $V_GLIBC:"
 	echo "  - aarch64: return 64-bit TLS descriptor offsets for ILP32 (glibc-ilp32 2690bdac8f, patch 0009):"
@@ -320,7 +346,7 @@ manifest_glibc() {
 	echo
 	echo "release build: test-ilp32 glibc/debian/check-debian-clean.sh in a fresh clean chroot (pristine"
 	echo "  Debian 13 arm64 buildd base, thrown away afterwards) on an arm64 Debian 13 board: glibc's"
-	echo "  Build-Depends from Debian, the released ILP32 compiler $V_GCC_CC, binutils $V_BU and"
+	echo "  Build-Depends from Debian, the released ILP32 compiler $V_GCC_CC_GLIBC, binutils $V_BU and"
 	echo "  linux-libc-dev-ilp32 $V_LINUX from the signed repository (keyring fingerprint"
 	echo "  D5723B340CBE7C99209182439C6A5E841E289B20); built and tested as an unprivileged user"
 	echo "  (installed packages list below)"
@@ -366,10 +392,12 @@ manifest() {
 		echo "  linux-libc-dev-ilp32  $V_LINUX"
 		echo "  (built with binutils $V_BU)"
 	else
+		echo "  libstdc++6-ilp32, libgomp1-ilp32  $V_GCC_RT"
 		echo "  gcc-14-aarch64-linux-gnu-ilp32, g++-14-aarch64-linux-gnu-ilp32  $V_GCC_CC"
-		echo "runtime: $V_GCC"
-		echo "  (the GCC runtime packages stay at $V_GCC; binutils-aarch64-linux-gnu-ilp32 $V_BU,"
-		echo "  libc6-ilp32/libc6-dev-ilp32 $V_GLIBC and linux-libc-dev-ilp32 $V_LINUX are released and unchanged)"
+		echo "runtime: $V_GCC_RT"
+		echo "  (libgcc-s1-ilp32 and libatomic1-ilp32 stay at $V_GCC: same code, not in this hand-off;"
+		echo "  binutils-aarch64-linux-gnu-ilp32 $V_BU and linux-libc-dev-ilp32 $V_LINUX are released and unchanged;"
+		echo "  glibc: built against the released libc6-dev-ilp32 $V_GLIBC, see below)"
 	fi
 	echo
 	echo "sources (Debian 13 trixie / trixie-security, .dsc sha256):"
@@ -387,8 +415,8 @@ manifest() {
 	echo "         = debian-gcc gcc-14.2.0 branch ilp32 $(git -C "$GCC_SRC" rev-parse --short ilp32)"
 	o=$(git -C "$GCC_SRC" log --format=%s debian..ilp32)
 	if grep -q "revert Debian's libgomp-omp_h-multilib" <<< "$o"; then
-		echo "         (Debian's libgomp-omp_h-multilib reverted: its omp_nest_lock_t was 12 bytes/align 4 for"
-		echo "         ILP32, libgomp's is 24/8; omp.h has configure's sizes again, as upstream)"
+		echo "         (Debian's libgomp-omp_h-multilib reverted: omp.h has the sizes libgomp's configure"
+		echo "         measures, as upstream; Debian's fixed 8 + sizeof (void *) was wrong for the posix libgomp)"
 	fi
 	echo "  binutils: Debian's (dpkg-source), none added"
 	echo
@@ -408,7 +436,12 @@ manifest() {
 	echo "  - glibc: no --enable-memory-tagging (MTE tags are in pointer bits 56-59), no libmvec (--disable-mathvec,"
 	echo "    not built for ILP32 anyway), --enable-kernel=3.2 raised to 5.10 (the ILP32 minimum), separate ILP32"
 	echo "    headers (the port changes installed headers), only the ILP32 libraries (no arm64 pass)"
-	echo "  - gcc: Debian's libgomp-omp_h-multilib not applied (reverted): wrong omp_nest_lock_t size for ILP32"
+	echo "  - gcc: Debian's libgomp-omp_h-multilib not applied (reverted): omp.h has libgomp's configured sizes"
+	if [ "$PARTS" = compiler ]; then
+		echo "  - gcc: SYS_futex_time64 where glibc has no SYS_futex (ILP32 has only 64-bit time): libgomp,"
+		echo "    libitm and libstdc++ use futexes as on the other Linux targets, instead of their posix fallbacks"
+		echo "    (the posix libgomp barriers hung intermittently)"
+	fi
 	echo "  - gcc: --disable-multiarch (gcc's aarch64 multiarch name is the LP64 triplet), --with-abi=ilp32"
 	echo "    --with-multilib-list=ilp32 --disable-multilib, --enable-languages=c,c++, --disable-libsanitizer"
 	echo "    (no ILP32 support); otherwise Debian's layout (gcc-cross/$T/14, -14 program suffix)"
@@ -423,6 +456,9 @@ manifest() {
 		echo "  repository (keyring fingerprint D5723B340CBE7C99209182439C6A5E841E289B20), versions pinned:"
 		echo "  binutils-aarch64-linux-gnu-ilp32 $V_BU, libc6-ilp32 and libc6-dev-ilp32 $V_GLIBC,"
 		echo "  linux-libc-dev-ilp32 $V_LINUX; --with-sysroot=/ against them (installed packages list below)"
+		echo "  (libc6-dev-ilp32 $V_GLIBC_NEW, not in the repository yet, has the same headers, start files,"
+		echo "  static libraries' symbols and shared libraries' dynamic symbols as $V_GLIBC; only the code of"
+		echo "  ld.so and libc.so.6 differs (the TLS descriptor fix), which the build does not use)"
 		sed 's/^/  /' "$CLEAN/build-env.txt"
 		echo "  host linked against Debian 13's arm64 gmp, mpfr, mpc, isl, zlib, zstd; host flags -g -O2,"
 		echo "  -Wl,-z,relro (Debian's for cross compilers); host binaries stripped; gcc --with-bugurl: the project's"
@@ -439,10 +475,24 @@ manifest() {
 		echo "gcc (board) configure: $(strings -a "$STAGE/gcc-14-aarch64-linux-gnu-ilp32/usr/bin/$T-gcc-14" | grep -m1 -- '--with-pkgversion')"
 	fi
 	echo
+	if [ "$PARTS" = runtime ]; then
 	echo "tests (QEMU, kernel ilp32-6.12.y Image-ilp32-6.12.y-{noa32,pac}): glibc check-abi 15/15;"
 	echo "  test-ilp32 run-glibc-test.sh 5/5, NOTIME32=1 4/4; libgcc pac-ret unwind (run-pac.sh) 9/9 on"
 	echo "  -cpu max and cortex-a35; glibc PAC/BTI/dirty arguments (pac-run.sh) 7/7 on both"
+	fi
 	if [ "$PARTS" = compiler ]; then
+		echo
+		echo "runtime ABI change from $V_GCC (libstdc++6-ilp32, libgomp1-ilp32 $V_GCC_RT; with gcc/g++ $V_GCC_CC):"
+		echo "  - omp.h: omp_lock_t 16/8 -> 4/4, omp_nest_lock_t 24/8 -> 12/4 (size/align); OpenMP lock users"
+		echo "    must be rebuilt"
+		echo "  - libstdc++: std::promise/std::future/std::async shared state (__atomic_futex_unsigned), std::atomic"
+		echo "    wait/notify and std::counting_semaphore (header code), static local initialization guards use"
+		echo "    futexes; C++ programs using them must be rebuilt (exported symbols: only added, see above)"
+		echo "  - SONAMEs unchanged; programs not using these are not affected"
+		if [ -f "$CLEAN/tr-run.txt" ]; then
+			echo "libgomp task-reduction hang check (tr-run.sh, ILP32 runs with these libraries, as nobody):"
+			sed 's/^/  /' "$CLEAN/tr-run.txt"
+		fi
 		echo "testsuites of the release build, in the same clean chroot (kernel $(sed -n 's/^kernel: //p' "$CLEAN/build-env.txt")):"
 		for f in "$CLEAN"/testsuite/*.sum; do
 			[ -f "$f" ] || { echo "  (none)"; continue; }
