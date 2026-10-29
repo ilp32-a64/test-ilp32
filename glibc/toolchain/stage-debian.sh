@@ -421,7 +421,7 @@ manifest() {
 	echo "  binutils: Debian's (dpkg-source), none added"
 	echo
 	echo "glibc configure: $(sed -n 's/^  \$ [^ ]*configure //p' "$GLIBC_W/build/glibc/config.log" | head -1 |
-		sed "s|$TC|<toolchain>|g")"
+		sed -e "s|$TC|<toolchain>|g" -e "s|$TOP/out|<toolchain>|g")"
 	echo "glibc CFLAGS/ASFLAGS: -pipe -O2 -g (+ prefix maps); CC $T-gcc -mbranch-protection=bti -U_FILE_OFFSET_BITS -U_TIME_BITS"
 	echo "gcc configure: $("$TC/bin/$T-gcc" -v 2>&1 | sed -n 's/^Configured with: [^ ]*configure //p' |
 		sed -e "s|$TC|<toolchain>|g" -e 's/ -f\(file\|debug\)-prefix-map=[^ '"'"']*//g' \
@@ -469,7 +469,7 @@ manifest() {
 		echo "  /usr/libilp32) in /usr/lib/gcc-cross/$T/14 as Debian's cross gcc packages; without include/ssp"
 		echo "  (libssp and libitm are built but not packaged)"
 		sed 's/^/  /' "$HOSTINFO"
-		echo "  $(cat "$CLEAN/omp-check.txt")"
+		sed 's/^/  /' "$CLEAN/omp-check.txt"
 		echo "  target code checks:"
 		cat "$CODECHECK"
 		echo "gcc (board) configure: $(strings -a "$STAGE/gcc-14-aarch64-linux-gnu-ilp32/usr/bin/$T-gcc-14" | grep -m1 -- '--with-pkgversion')"
@@ -520,4 +520,5 @@ manifest() {
 	fi
 }
 if [ "$PARTS" = glibc ]; then manifest_glibc > "$STAGE/MANIFEST"; else manifest > "$STAGE/MANIFEST"; fi
+if grep -n -e /home/ -e /srv/ -e ubuntu-VirtualBox "$STAGE/MANIFEST"; then echo "build machine paths in the MANIFEST"; exit 1; fi
 for p in "$STAGE"/*-ilp32; do echo "$(basename "$p"): $(find "$p" \( -type f -o -type l \) | wc -l) files"; done

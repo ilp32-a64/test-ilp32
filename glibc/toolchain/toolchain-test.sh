@@ -58,7 +58,8 @@ int main(void) {
 	return 0;
 }
 EOF
-# omp.h's lock types against libgomp's configured sizes (AArch64 ILP32: 16/8 and 24/8)
+# omp.h's lock types against libgomp's configured sizes (AArch64 ILP32 with the futex libgomp, from
+# compiler 14.2.0-19+ilp32a64.4: 4/4 and 12/4; the posix libgomp before had 16/8 and 24/8)
 cat > "$D/ompsize.c" <<'EOF'
 #include <omp.h>
 #include <stdio.h>
@@ -131,7 +132,7 @@ t omp "500500 threads" "$T-gcc" -O2 -fopenmp
 cp "$D/omp.c" "$D/omp-static.c"; t omp-static "500500 threads" "$T-gcc" -O2 -fopenmp -static
 t atomic "3 4 5" "$T-gcc" -O2 -- -latomic
 cp "$D/atomic.c" "$D/atomic-static.c"; t atomic-static "3 4 5" "$T-gcc" -O2 -static -- -latomic
-t ompsize "16/8 24/8" "$T-gcc" -O2 -fopenmp
+t ompsize "4/4 12/4" "$T-gcc" -O2 -fopenmp
 for i in 1 2 3; do cp "$D/nestlock.c" "$D/nestlock$i.c"; t nestlock$i "nest lock ok" "$T-gcc" -O2 -fopenmp -pthread; done
 cp "$D/nestlock.c" "$D/nestlock-static.c"; t nestlock-static "nest lock ok" "$T-gcc" -O2 -fopenmp -pthread -static
 # Debian's test line: libm and libatomic after the source
