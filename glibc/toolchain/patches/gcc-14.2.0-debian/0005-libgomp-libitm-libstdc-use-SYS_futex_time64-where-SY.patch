@@ -1,0 +1,256 @@
+From b7b3a907385850dc620b767008f5b01cf355397c Mon Sep 17 00:00:00 2001
+From: liviyifan <344781483+liviyifan@users.noreply.github.com>
+Date: Thu, 29 Oct 2026 22:35:05 +0800
+Subject: [PATCH 5/5] libgomp, libitm, libstdc++: use SYS_futex_time64 where
+ SYS_futex is missing
+
+glibc for AArch64 ILP32 has only a 64-bit time_t and, like riscv32,
+defines SYS_futex_time64 but not SYS_futex. GCC_LINUX_FUTEX's link test
+needs SYS_futex, so configure disabled the futex support on that target:
+libgomp was built with config/posix instead of config/linux, libitm
+without its futex code and libstdc++ without _GLIBCXX_HAVE_LINUX_FUTEX.
+The posix libgomp barriers hang intermittently (libgomp.c-c++-common
+task-reduction-8.c and others, all threads blocked in sem_wait).
+musl defines SYS_futex as SYS_futex_time64 there and was not affected.
+
+Where only SYS_futex_time64 exists, define SYS_futex to it, in the
+configure test and in the futex users: libgomp's and libitm's futex
+helpers (no timeouts), libstdc++'s guard.cc (no timeouts), futex.cc and
+atomic_wait.h (the timeouts are a struct timespec, which has a 64-bit
+tv_sec on these targets, as futex_time64 expects; in futex.cc the alias
+comes before the syscall_timespec choice so that ::timespec is used).
+The libgomp, libitm and libstdc++ configure scripts are regenerated with
+autoconf 2.69.
+
+This changes the ABI of the target: omp_lock_t and omp_nest_lock_t
+become the config/linux types (4 and 12 bytes, align 4), and libstdc++
+switches std::promise/std::future shared state, std::atomic wait/notify
+and the static initialization guards to futexes. Programs built with
+the previous runtime that use them must be rebuilt.
+
+See also PR libstdc++/93421 and PR libstdc++/97182.
+
+Signed-off-by: liviyifan <344781483+liviyifan@users.noreply.github.com>
+---
+ config/futex.m4                         | 8 ++++++++
+ libgomp/config/linux/futex.h            | 6 ++++++
+ libgomp/configure                       | 8 ++++++++
+ libitm/config/linux/futex_bits.h        | 6 ++++++
+ libitm/configure                        | 8 ++++++++
+ libstdc++-v3/configure                  | 8 ++++++++
+ libstdc++-v3/include/bits/atomic_wait.h | 5 +++++
+ libstdc++-v3/libsupc++/guard.cc         | 5 +++++
+ libstdc++-v3/src/c++11/futex.cc         | 8 ++++++++
+ 9 files changed, 62 insertions(+)
+
+diff --git a/config/futex.m4 b/config/futex.m4
+index c21243854..0a2f0956c 100644
+--- a/config/futex.m4
++++ b/config/futex.m4
+@@ -18,11 +18,16 @@ case "$target" in
+ 	# compiled/linked against NPTL and not cross-compiling, check
+ 	# if programs are run by default against NPTL and if not, issue
+ 	# a warning.
++	# Targets with only a 64-bit time_t, such as glibc for AArch64
++	# ILP32, have SYS_futex_time64 but no SYS_futex: use that.
+ 	enable_linux_futex=no
+ 	AC_LINK_IFELSE(
+ 	 [AC_LANG_PROGRAM(
+ 	  [#include <sys/syscall.h>
+ 	   #include <unistd.h>
++	   #if !defined (SYS_futex) && defined (SYS_futex_time64)
++	   #define SYS_futex SYS_futex_time64
++	   #endif
+ 	   int lk;],
+ 	  [syscall (SYS_gettid); syscall (SYS_futex, &lk, 0, 0, 0);])],
+ 	  [save_LIBS="$LIBS"
+@@ -50,6 +55,9 @@ If so, please configure with --disable-linux-futex])
+ 	 [AC_LANG_PROGRAM(
+ 	  [#include <sys/syscall.h>
+ 	   #include <unistd.h>
++	   #if !defined (SYS_futex) && defined (SYS_futex_time64)
++	   #define SYS_futex SYS_futex_time64
++	   #endif
+ 	   int lk;],
+ 	  [syscall (SYS_gettid); syscall (SYS_futex, &lk, 0, 0, 0);])],[],
+ 	  [AC_MSG_ERROR([SYS_gettid and SYS_futex required for --enable-linux-futex])])
+diff --git a/libgomp/config/linux/futex.h b/libgomp/config/linux/futex.h
+index d3693e923..ac217b25a 100644
+--- a/libgomp/config/linux/futex.h
++++ b/libgomp/config/linux/futex.h
+@@ -39,6 +39,12 @@
+ 
+ #pragma GCC visibility pop
+ 
++/* Targets with only a 64-bit time_t (glibc for AArch64 ILP32) have
++   SYS_futex_time64 but no SYS_futex.  */
++#if !defined (SYS_futex) && defined (SYS_futex_time64)
++#define SYS_futex SYS_futex_time64
++#endif
++
+ static inline void
+ futex_wait (int *addr, int val)
+ {
+diff --git a/libgomp/configure b/libgomp/configure
+index ad245b47d..19d419f69 100755
+--- a/libgomp/configure
++++ b/libgomp/configure
+@@ -15469,11 +15469,16 @@ case "$target" in
+ 	# compiled/linked against NPTL and not cross-compiling, check
+ 	# if programs are run by default against NPTL and if not, issue
+ 	# a warning.
++	# Targets with only a 64-bit time_t, such as glibc for AArch64
++	# ILP32, have SYS_futex_time64 but no SYS_futex: use that.
+ 	enable_linux_futex=no
+ 	cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+ /* end confdefs.h.  */
+ #include <sys/syscall.h>
+ 	   #include <unistd.h>
++	   #if !defined (SYS_futex) && defined (SYS_futex_time64)
++	   #define SYS_futex SYS_futex_time64
++	   #endif
+ 	   int lk;
+ int
+ main ()
+@@ -15527,6 +15532,9 @@ rm -f core conftest.err conftest.$ac_objext \
+ /* end confdefs.h.  */
+ #include <sys/syscall.h>
+ 	   #include <unistd.h>
++	   #if !defined (SYS_futex) && defined (SYS_futex_time64)
++	   #define SYS_futex SYS_futex_time64
++	   #endif
+ 	   int lk;
+ int
+ main ()
+diff --git a/libitm/config/linux/futex_bits.h b/libitm/config/linux/futex_bits.h
+index c315efa7f..b5d63506e 100644
+--- a/libitm/config/linux/futex_bits.h
++++ b/libitm/config/linux/futex_bits.h
+@@ -33,6 +33,12 @@
+ #include <sys/syscall.h>
+ #include <errno.h>
+ 
++/* Targets with only a 64-bit time_t (glibc for AArch64 ILP32) have
++   SYS_futex_time64 but no SYS_futex.  */
++#if !defined (SYS_futex) && defined (SYS_futex_time64)
++#define SYS_futex SYS_futex_time64
++#endif
++
+ static inline long
+ sys_futex0 (std::atomic<int> *addr, int op, int val)
+ {
+diff --git a/libitm/configure b/libitm/configure
+index 9ba7fb03a..d86d162c2 100755
+--- a/libitm/configure
++++ b/libitm/configure
+@@ -16650,11 +16650,16 @@ case "$target" in
+ 	# compiled/linked against NPTL and not cross-compiling, check
+ 	# if programs are run by default against NPTL and if not, issue
+ 	# a warning.
++	# Targets with only a 64-bit time_t, such as glibc for AArch64
++	# ILP32, have SYS_futex_time64 but no SYS_futex: use that.
+ 	enable_linux_futex=no
+ 	cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+ /* end confdefs.h.  */
+ #include <sys/syscall.h>
+ 	   #include <unistd.h>
++	   #if !defined (SYS_futex) && defined (SYS_futex_time64)
++	   #define SYS_futex SYS_futex_time64
++	   #endif
+ 	   int lk;
+ int
+ main ()
+@@ -16708,6 +16713,9 @@ rm -f core conftest.err conftest.$ac_objext \
+ /* end confdefs.h.  */
+ #include <sys/syscall.h>
+ 	   #include <unistd.h>
++	   #if !defined (SYS_futex) && defined (SYS_futex_time64)
++	   #define SYS_futex SYS_futex_time64
++	   #endif
+ 	   int lk;
+ int
+ main ()
+diff --git a/libstdc++-v3/configure b/libstdc++-v3/configure
+index 2cd6bd8b5..16eb9bd85 100755
+--- a/libstdc++-v3/configure
++++ b/libstdc++-v3/configure
+@@ -50696,6 +50696,8 @@ case "$target" in
+ 	# compiled/linked against NPTL and not cross-compiling, check
+ 	# if programs are run by default against NPTL and if not, issue
+ 	# a warning.
++	# Targets with only a 64-bit time_t, such as glibc for AArch64
++	# ILP32, have SYS_futex_time64 but no SYS_futex: use that.
+ 	enable_linux_futex=no
+ 	if test x$gcc_no_link = xyes; then
+   as_fn_error $? "Link tests are not allowed after GCC_NO_EXECUTABLES." "$LINENO" 5
+@@ -50704,6 +50706,9 @@ cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+ /* end confdefs.h.  */
+ #include <sys/syscall.h>
+ 	   #include <unistd.h>
++	   #if !defined (SYS_futex) && defined (SYS_futex_time64)
++	   #define SYS_futex SYS_futex_time64
++	   #endif
+ 	   int lk;
+ int
+ main ()
+@@ -50763,6 +50768,9 @@ cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+ /* end confdefs.h.  */
+ #include <sys/syscall.h>
+ 	   #include <unistd.h>
++	   #if !defined (SYS_futex) && defined (SYS_futex_time64)
++	   #define SYS_futex SYS_futex_time64
++	   #endif
+ 	   int lk;
+ int
+ main ()
+diff --git a/libstdc++-v3/include/bits/atomic_wait.h b/libstdc++-v3/include/bits/atomic_wait.h
+index 6c98f3963..c67ec76ff 100644
+--- a/libstdc++-v3/include/bits/atomic_wait.h
++++ b/libstdc++-v3/include/bits/atomic_wait.h
+@@ -46,6 +46,11 @@
+ # include <unistd.h>
+ # include <syscall.h>
+ # include <bits/functexcept.h>
++// Targets with only a 64-bit time_t (glibc for AArch64 ILP32) have
++// SYS_futex_time64 but no SYS_futex.
++# if !defined(SYS_futex) && defined(SYS_futex_time64)
++#  define SYS_futex SYS_futex_time64
++# endif
+ #endif
+ 
+ # include <bits/std_mutex.h>  // std::mutex, std::__condvar
+diff --git a/libstdc++-v3/libsupc++/guard.cc b/libstdc++-v3/libsupc++/guard.cc
+index 707083e09..9d687158a 100644
+--- a/libstdc++-v3/libsupc++/guard.cc
++++ b/libstdc++-v3/libsupc++/guard.cc
+@@ -65,6 +65,11 @@ __cxa_guard_abort (__guard* g) _GLIBCXX_NOTHROW
+ # include <climits>
+ # include <syscall.h>
+ # include <unistd.h>
++// Targets with only a 64-bit time_t (glibc for AArch64 ILP32) have
++// SYS_futex_time64 but no SYS_futex.
++# if !defined(SYS_futex) && defined(SYS_futex_time64)
++#  define SYS_futex SYS_futex_time64
++# endif
+ # define _GLIBCXX_USE_FUTEX
+ # define _GLIBCXX_FUTEX_WAIT 0
+ # define _GLIBCXX_FUTEX_WAKE 1
+diff --git a/libstdc++-v3/src/c++11/futex.cc b/libstdc++-v3/src/c++11/futex.cc
+index 6139fc354..11aa3ee71 100644
+--- a/libstdc++-v3/src/c++11/futex.cc
++++ b/libstdc++-v3/src/c++11/futex.cc
+@@ -39,6 +39,14 @@
+ #include <sys/syscall.h>
+ #endif
+ 
++// Targets with only a 64-bit time_t (glibc for AArch64 ILP32) have
++// SYS_futex_time64 but no SYS_futex.  Their timespec has a 64-bit tv_sec,
++// as futex_time64 expects, and defining SYS_futex to it here selects
++// ::timespec below.
++#if !defined(SYS_futex) && defined(SYS_futex_time64)
++# define SYS_futex SYS_futex_time64
++#endif
++
+ // Constants for the wait/wake futex syscall operations
+ const unsigned futex_wait_op = 0;
+ const unsigned futex_wait_bitset_op = 9;

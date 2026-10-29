@@ -1,7 +1,7 @@
 From b4953f9e8ce8ba306547f06b090d73e04d7bc843 Mon Sep 17 00:00:00 2001
 From: liviyifan <344781483+liviyifan@users.noreply.github.com>
 Date: Wed, 28 Oct 2026 07:30:31 +0800
-Subject: [PATCH 4/4] libatomic, libitm: AArch64 ILP32: emit ELF32 GNU property
+Subject: [PATCH 4/5] libatomic, libitm: AArch64 ILP32: emit ELF32 GNU property
  notes
 
 libatomic's atomic_16.S and libitm's sjlj.S have their own copy of the
