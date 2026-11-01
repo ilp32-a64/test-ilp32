@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Stage one library of the AArch64 ILP32 CPython set for the debian session: a read-only snapshot with
-stage/<package>-ilp32/ trees (unstripped), doc/<source>.{copyright,changelog} and a MANIFEST in the format
+<package>-ilp32/ trees (unstripped), doc/<source>.{copyright,changelog} and a MANIFEST in the format
 debian asked for (versions, packages, dev-depends, file lists).
 
   stage-lib.py <source> <build output> <Debian source dir> <stage file> <new stage dir>
@@ -164,7 +164,7 @@ def main():
     env = open(os.path.join(out, "build-env.txt")).read().strip().splitlines()
     names = [p + "-ilp32" for p in packages]
     L = []
-    L.append(f"# AArch64 ILP32 {source} from Debian 13 sources: install trees (stage/<package>/)")
+    L.append(f"# AArch64 ILP32 {source} from Debian 13 sources: install trees (<package>/)")
     L.append(f"date: {subprocess.run(['date', '-u', '+%F'], capture_output=True, text=True).stdout.strip()}"
              f"   test-ilp32 {head} cpython/stage-lib.py {source}")
     L += ["", "versions:", f"  {', '.join(names)}  {version}", "", "packages:"]
@@ -186,7 +186,15 @@ def main():
           "  debian/rules' arm64 options for the triplet aarch64-linux-gnu_ilp32, dpkg-buildflags of trixie",
           "  with -mbranch-protection=bti instead of standard (GCC has no pac-ret for ILP32); libraries in",
           f"  /usr/libilp32, headers in /usr/{T}/include"]
-    L += ["  " + l for l in env if not l.startswith(("source:", "recipe:"))]
+    for l in env:
+        if l.startswith(("source:", "recipe:")):
+            continue
+        if l == "toolchain: local":
+            l = ("toolchain: local debs, debian's v2026.10.30 candidates (compiler .4, runtime .2, glibc .2;"
+                 " versions in the package list below), not yet from the repository")
+        elif l == "toolchain: repo":
+            l = "toolchain: from the signed repository (pinned versions, in the package list below)"
+        L.append("  " + l)
     if deviations:
         L += ["", "deviations from Debian's build:"] + [f"  - {d}" for d in deviations]
     if dropped:
