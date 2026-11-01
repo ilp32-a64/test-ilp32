@@ -1,0 +1,7 @@
+# zlib: debian/zlib1g.install, debian/zlib1g-dev.install, debian/control
+pkg zlib1g usr/libilp32/libz.so.*
+pkg zlib1g-dev usr/aarch64-linux-gnu_ilp32/include/*.h usr/libilp32/libz.a usr/libilp32/libz.so usr/libilp32/pkgconfig/zlib.pc
+dev-depends zlib1g-dev libc6-dev-ilp32
+drop usr/share/man/man3/* -- the same path as in Debian's zlib1g-dev (file conflict); the LP64 page applies
+deviation minizip (minizip, libminizip1t64, libminizip-dev) not built: not part of the set
+deviation AR is aarch64-linux-gnu_ilp32-ar instead of the native ar (same GNU ar)

@@ -1,0 +1,22 @@
+Recipes of the AArch64 ILP32 CPython set: what each Debian 13 source's debian/rules does for arm64,
+for the triplet aarch64-linux-gnu_ilp32, with Debian's layout mapped to the ILP32 one
+(/usr/lib/<multiarch> -> /usr/libilp32, /usr/include and /usr/include/<multiarch> ->
+/usr/aarch64-linux-gnu_ilp32/include).
+
+<source>.sh (sourced by build-lib-clean.sh's run.sh as the user builder, in the unpacked source):
+  MAINT                 debian/rules' DEB_BUILD_MAINT_OPTIONS (for dpkg-buildflags)
+  recipe_build          configure and build (debian/rules' configure and build steps)
+  recipe_check          optional: Debian's test step; CHECK_IGNORE_FAILURE=1 where Debian ignores failures
+  recipe_install        install into $RAW (Debian's install step, DESTDIR or prefix as debian/rules does)
+  Given: T, S (source), RAW, J, LIBDIR, INCDIR, CC/CXX/AR/RANLIB/NM/STRIP/OBJDUMP (the ILP32 tools),
+  CFLAGS/CPPFLAGS/CXXFLAGS/LDFLAGS (dpkg-buildflags for arm64, bti instead of pac-ret),
+  PKG_CONFIG_LIBDIR (ILP32 .pc files only), update_autotools_config (as dh_update_autotools_config).
+
+<source>.stage (read by stage-lib.py): which installed files go to which binary package. One entry
+per line, "#" comments; patterns are paths relative to the install tree (fnmatch, "*" does not cross
+"/"); every installed file must match exactly one package or a drop line:
+  pkg <debian-package> <pattern>...       files of the Debian binary package (staged as <name>-ilp32)
+  dev-depends <debian-package> <pkg>...   the -dev package's Depends from debian/control besides its
+                                          runtime package, as -ilp32 names (debian adds the versions)
+  drop <pattern> -- <reason>              installed but not packaged, with the reason (in the MANIFEST)
+  deviation <text>                        a difference from Debian's build (in the MANIFEST)
