@@ -1,0 +1,7 @@
+# libzstd: debian/libzstd1.install, debian/libzstd-dev.install, debian/control
+pkg libzstd1 usr/libilp32/libzstd.so.*
+pkg libzstd-dev usr/aarch64-linux-gnu_ilp32/include/*.h usr/libilp32/libzstd.a usr/libilp32/libzstd.so usr/libilp32/pkgconfig/libzstd.pc usr/libilp32/cmake/zstd/*.cmake
+dev-depends libzstd-dev
+drop usr/bin/* -- the zstd programs: no command line tools in the set
+drop usr/share/** -- the programs' manual pages
+deviation contrib/pzstd (the pzstd program, Debian's zstd package) not built: no command line tools in the set

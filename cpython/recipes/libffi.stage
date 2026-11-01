@@ -1,0 +1,7 @@
+# libffi: debian/libffi8.install, debian/libffi-dev.install, debian/rules install, debian/control
+pkg libffi8 usr/libilp32/libffi.so.*
+pkg libffi-dev usr/aarch64-linux-gnu_ilp32/include/ffi.h usr/aarch64-linux-gnu_ilp32/include/ffitarget.h usr/libilp32/libffi.a usr/libilp32/libffi_pic.a usr/libilp32/libffi.so usr/libilp32/pkgconfig/libffi.pc
+dev-depends libffi-dev
+drop usr/share/** -- manual pages and the info manual: the same paths as in Debian's libffi-dev (file conflict)
+deviation configure --libdir=/usr/libilp32 --includedir=/usr/aarch64-linux-gnu_ilp32/include instead of Debian's moves to the multiarch directories afterwards: the same file locations, and libffi.pc's includedir is the ILP32 one (Debian's would give -I/usr/include, the LP64 headers)
+deviation the HTML manual (doc/libffi.html) is not built: documentation only
