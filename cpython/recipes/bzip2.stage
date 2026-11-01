@@ -1,0 +1,8 @@
+# bzip2: debian/rules override_dh_install/override_dh_link, debian/libbz2-dev.install, debian/control
+pkg libbz2-1.0 usr/libilp32/libbz2.so.1.0 usr/libilp32/libbz2.so.1.0.4 usr/libilp32/libbz2.so.1
+pkg libbz2-dev usr/aarch64-linux-gnu_ilp32/include/bzlib.h usr/libilp32/libbz2.a usr/libilp32/libbz2.so usr/libilp32/pkgconfig/bzip2.pc
+dev-depends libbz2-dev libc6-dev-ilp32
+drop usr/bin/* -- the bzip2 programs: no command line tools in the set
+drop usr/man/man1/* -- the programs' manual pages
+deviation bzip2.pc in /usr/libilp32/pkgconfig with libdir ${exec_prefix}/libilp32 and the ILP32 include directory (Debian: /usr/share/pkgconfig, libdir ${exec_prefix}/lib), where the ILP32 pkg-config looks
+deviation AR/RANLIB are the aarch64-linux-gnu_ilp32 ones instead of the native ar/ranlib (same GNU binutils)

@@ -1,0 +1,7 @@
+# xz-utils: debian/liblzma5.install, debian/liblzma-dev.install, debian/control
+pkg liblzma5 usr/libilp32/liblzma.so.*
+pkg liblzma-dev usr/aarch64-linux-gnu_ilp32/include/lzma.h usr/aarch64-linux-gnu_ilp32/include/lzma/*.h usr/libilp32/liblzma.a usr/libilp32/liblzma.so usr/libilp32/pkgconfig/liblzma.pc
+dev-depends liblzma-dev
+drop usr/bin/* -- the xz programs: no command line tools in the set
+drop usr/share/** -- manual pages, translations and documents of the programs (Debian's xz-utils, xz-utils-doc)
+deviation xzdec-build (the xzdec and lzmadec programs, Debian's xzdec package) not built: no command line tools in the set

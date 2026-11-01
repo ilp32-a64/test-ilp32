@@ -29,9 +29,13 @@ def die(msg):
 
 
 def glob_re(pat):
-    out = ""
-    for ch in pat:
-        out += {"*": "[^/]*", "?": "[^/]"}.get(ch, re.escape(ch))
+    # "*" and "?" stay within one path component, "**" spans any number of them
+    out, i = "", 0
+    while i < len(pat):
+        if pat.startswith("**", i):
+            out, i = out + ".*", i + 2
+        else:
+            out, i = out + {"*": "[^/]*", "?": "[^/]"}.get(pat[i], re.escape(pat[i])), i + 1
     return re.compile(out + r"\Z")
 
 

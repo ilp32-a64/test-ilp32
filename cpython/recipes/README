@@ -14,7 +14,7 @@ for the triplet aarch64-linux-gnu_ilp32, with Debian's layout mapped to the ILP3
 
 <source>.stage (read by stage-lib.py): which installed files go to which binary package. One entry
 per line, "#" comments; patterns are paths relative to the install tree (fnmatch, "*" does not cross
-"/"); every installed file must match exactly one package or a drop line:
+"/", "**" does); every installed file must match exactly one package or a drop line:
   pkg <debian-package> <pattern>...       files of the Debian binary package (staged as <name>-ilp32)
   dev-depends <debian-package> <pkg>...   the -dev package's Depends from debian/control besides its
                                           runtime package, as -ilp32 names (debian adds the versions)
