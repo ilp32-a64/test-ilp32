@@ -208,7 +208,10 @@ def main():
     chk = os.path.join(out, "check.log")
     L += ["", "tests (Debian's test step, in the same chroot):"]
     if os.path.exists(chk):
-        L += ["  " + l for l in open(chk, errors="replace").read().strip().splitlines()[-12:]]
+        blog = open(os.path.join(out, "build.log"), errors="replace").read().splitlines()
+        res = [l for l in blog if l.startswith("check exit ")]
+        L.append("  result: " + (res[-1].split(" (")[0] if res else "UNKNOWN") + "; the end of its log:")
+        L += ["    " + l for l in open(chk, errors="replace").read().strip().splitlines()[-12:]]
     else:
         L.append("  (Debian runs none)")
     L += ["", f"checks: {elfs} ELF files/archives all ELF32; shared objects with the BTI property note;",
