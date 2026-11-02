@@ -184,6 +184,10 @@ def main():
     L += ["", "source (Debian 13, checked against InRelease by fetch-sources.py):"]
     L += ["  " + l for l in env if l.startswith(("source:", "recipe:"))]
     L.append(f"  Debian patches: all {npatch} of debian/patches/series, applied by dpkg-source -x")
+    ilp32p = [l for l in env if l.startswith("patch: ")]
+    if ilp32p:
+        L.append(f"  ILP32 patches on top (test-ilp32 cpython/recipes/{source}.patches/, the reasons in their headers):")
+        L += ["    " + l[len("patch: "):] for l in ilp32p]
     L += ["", "build: test-ilp32 cpython/build-lib-clean.sh, in a fresh clean chroot (pristine Debian 13 arm64",
           "  buildd base, thrown away afterwards) on an arm64 Debian 13 board: the source's Build-Depends from",
           "  Debian (apt-get build-dep), the ILP32 toolchain and the set's earlier -ilp32 packages (list below);",
@@ -191,7 +195,7 @@ def main():
           "  with -mbranch-protection=bti instead of standard (GCC has no pac-ret for ILP32); libraries in",
           f"  /usr/libilp32, headers in /usr/{T}/include"]
     for l in env:
-        if l.startswith(("source:", "recipe:")):
+        if l.startswith(("source:", "recipe:", "patch: ")):
             continue
         if l == "toolchain: local":
             l = ("toolchain: local debs, debian's v2026.10.30 candidates (compiler .4, runtime .2, glibc .2;"

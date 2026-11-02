@@ -9,6 +9,7 @@
 # Inputs, all named exactly (no "newest file" guessing):
 #   $W/in/py/src/<source>/          the .dsc and its files (fetch-sources.py: checked against Debian's InRelease)
 #   $W/in/py/recipes/<source>.sh    what debian/rules does, for the ILP32 triplet (recipes/README)
+#   $W/in/py/recipes/<source>.patches/*.patch   ILP32 fixes on top of Debian's patches (optional)
 #   $W/in/py/toolchain/             TOOLCHAIN=local (default): the ILP32 toolchain debs + SHA256SUMS
 #                                   TOOLCHAIN=repo: the pinned versions below from the signed repository
 #   $W/in/py/deps/<source>/         the set's earlier -ilp32 debs it needs + SHA256SUMS (none: no directory)
@@ -53,12 +54,16 @@ if [ "${1:-}" != inner ]; then
 	cp "$KEYRING_DEB" "$C/build/in/keyring.deb"
 	cp -a "$I/src/$SRC" "$C/build/in/src"
 	cp "$I/recipes/$SRC.sh" "$C/build/in/recipe.sh"
+	[ ! -d "$I/recipes/$SRC.patches" ] || cp -a "$I/recipes/$SRC.patches" "$C/build/in/patches"
 	[ "$TOOLCHAIN" = repo ] || cp -a "$I/toolchain" "$C/build/in/toolchain"
 	[ ! -d "$I/deps/$SRC" ] || cp -a "$I/deps/$SRC" "$C/build/in/deps"
 	install -m 755 "$0" "$C/build/build-lib-clean.sh"
 	{
 		echo "source: $(cd "$I/src/$SRC" && ls *.dsc) $(sha256sum "$I/src/$SRC"/*.dsc | cut -c1-16)"
 		echo "recipe: $(sha256sum "$I/recipes/$SRC.sh" | cut -c1-16)"
+		if [ -d "$I/recipes/$SRC.patches" ]; then
+			for f in "$I/recipes/$SRC.patches"/*.patch; do echo "patch: $(basename "$f") $(sha256sum "$f" | cut -c1-16)"; done
+		fi
 		echo "toolchain: $TOOLCHAIN"
 	} > "$O/build-env.txt"
 	set +e
@@ -115,6 +120,10 @@ J=${J:-4}
 cd "$S"
 export LC_ALL=C.UTF-8 TZ=UTC HOME=/home/builder
 export SOURCE_DATE_EPOCH=$(dpkg-parsechangelog -STimestamp)
+# the ILP32 fixes on top of Debian's patches (recipes/<source>.patches/), in order
+if [ -d /build/in/patches ]; then
+	for p in /build/in/patches/*.patch; do echo "== patch $(basename "$p")"; patch -p1 --no-backup-if-mismatch < "$p"; done
+fi
 . /build/in/recipe.sh
 # dpkg-buildflags of trixie for arm64 with the recipe's DEB_BUILD_MAINT_OPTIONS, run in the source
 # directory (its -ffile-prefix-map); -mbranch-protection=standard -> bti (GCC has no pac-ret for ILP32)

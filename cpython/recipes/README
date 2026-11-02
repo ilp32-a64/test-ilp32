@@ -12,6 +12,9 @@ for the triplet aarch64-linux-gnu_ilp32, with Debian's layout mapped to the ILP3
   CFLAGS/CPPFLAGS/CXXFLAGS/LDFLAGS (dpkg-buildflags for arm64, bti instead of pac-ret),
   PKG_CONFIG_LIBDIR (ILP32 .pc files only), update_autotools_config (as dh_update_autotools_config).
 
+<source>.patches/*.patch (optional): ILP32 fixes applied with patch -p1 after Debian's patches,
+before recipe_build; each with a DEP-3 header saying why; listed in the MANIFEST.
+
 <source>.stage (read by stage-lib.py): which installed files go to which binary package. One entry
 per line, "#" comments; patterns are paths relative to the install tree (fnmatch, "*" does not cross
 "/", "**" does); every installed file must match exactly one package or a drop line:

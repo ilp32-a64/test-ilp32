@@ -1,0 +1,38 @@
+Description: huf_decompress_amd64.S: an ELF32 GNU property note for AArch64 ILP32
+ The hand-written .note.gnu.property of the (empty for AArch64) assembly file
+ has the ELF64 layout: 8-byte alignment and a 16-byte descriptor. In an ELF32
+ object (AArch64 ILP32, __ILP32__) notes are 4-byte aligned and the descriptor
+ is 12 bytes, so readelf reports the note as corrupt and it reaches every
+ program linked statically with libzstd.a. Emit the ELF32 layout for ILP32;
+ the LP64 note is unchanged.
+Author: liviyifan <344781483+liviyifan@users.noreply.github.com>
+Forwarded: no
+
+--- a/lib/decompress/huf_decompress_amd64.S
++++ b/lib/decompress/huf_decompress_amd64.S
+@@ -24,6 +24,17 @@
+  * See: https://reviews.llvm.org/D62609
+  */
+ .pushsection .note.gnu.property, "a"
++#if defined(__ILP32__)
++/* ELF32 (AArch64 ILP32): 4-byte alignment, so the descriptor is 12 bytes */
++.p2align 2
++.long 4                 /* size of the name - "GNU\0" */
++.long 0xc               /* size of descriptor */
++.long 0x5               /* NT_GNU_PROPERTY_TYPE_0 */
++.asciz "GNU"
++.long 0xc0000000        /* pr_type - GNU_PROPERTY_AARCH64_FEATURE_1_AND */
++.long 4                 /* pr_datasz - 4 bytes */
++.long 3                 /* pr_data - GNU_PROPERTY_AARCH64_FEATURE_1_BTI | GNU_PROPERTY_AARCH64_FEATURE_1_PAC */
++#else
+ .p2align 3
+ .long 4                 /* size of the name - "GNU\0" */
+ .long 0x10              /* size of descriptor */
+@@ -33,6 +44,7 @@
+ .long 4                 /* pr_datasz - 4 bytes */
+ .long 3                 /* pr_data - GNU_PROPERTY_AARCH64_FEATURE_1_BTI | GNU_PROPERTY_AARCH64_FEATURE_1_PAC */
+ .p2align 3              /* pr_padding - bring everything to 8 byte alignment */
++#endif
+ .popsection
+ #endif
+ 
