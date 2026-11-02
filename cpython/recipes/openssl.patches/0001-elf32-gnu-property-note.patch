@@ -1,0 +1,39 @@
+Description: arm_arch.h: an ELF32 GNU property note for AArch64 ILP32
+ The .note.gnu.property that arm_arch.h puts into every AArch64 assembly
+ file has the ELF64 layout: 8-byte alignment, a 16-byte descriptor with a
+ padding word. In ELF32 objects (AArch64 ILP32, __ILP32__, Debian's own
+ debian-arm64ilp32 target) notes are 4-byte aligned and the descriptor is
+ 12 bytes, so readelf reports the notes of the 22 assembly objects in
+ libcrypto.a as corrupt, and they reach every program linked statically
+ with it. Emit the ELF32 layout for ILP32; the LP64 note is unchanged.
+Author: liviyifan <344781483+liviyifan@users.noreply.github.com>
+Forwarded: no
+
+--- a/crypto/arm_arch.h
++++ b/crypto/arm_arch.h
+@@ -188,6 +188,17 @@
+ /* clang-format off */
+ .pushsection .note.gnu.property, "a";
+ /* clang-format on */
++#ifdef __ILP32__
++/* ELF32 (AArch64 ILP32): 4-byte alignment, a 12-byte descriptor */
++.balign 4;
++.long 4;
++.long 0xc;
++.long 0x5;
++.asciz "GNU";
++.long 0xc0000000; /* GNU_PROPERTY_AARCH64_FEATURE_1_AND */
++.long 4;
++.long(GNU_PROPERTY_AARCH64_POINTER_AUTH | GNU_PROPERTY_AARCH64_BTI);
++#else
+ .balign 8;
+ .long 4;
+ .long 0x10;
+@@ -197,6 +208,7 @@
+ .long 4;
+ .long(GNU_PROPERTY_AARCH64_POINTER_AUTH | GNU_PROPERTY_AARCH64_BTI);
+ .long 0;
++#endif
+ .popsection;
+ #endif
+ 
