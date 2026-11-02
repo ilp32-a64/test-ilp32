@@ -1,0 +1,6 @@
+# util-linux (libuuid only): debian/libuuid1.install, debian/uuid-dev.install, debian/control
+pkg libuuid1 usr/libilp32/libuuid.so.*
+pkg uuid-dev usr/aarch64-linux-gnu_ilp32/include/uuid/uuid.h usr/libilp32/libuuid.a usr/libilp32/libuuid.so usr/libilp32/pkgconfig/uuid.pc
+dev-depends uuid-dev libc6-dev-ilp32
+drop usr/share/** -- manual pages (uuid*.3: the same paths as in Debian's uuid-dev, file conflict) and documents
+deviation only libuuid is built (configure --disable-all-programs --enable-libuuid, without selinux, smack, systemd, udev, audit, cryptsetup, python, bash completion); Debian builds all of util-linux

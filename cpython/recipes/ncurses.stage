@@ -1,0 +1,14 @@
+# ncurses: debian/libtinfo6.install, libncurses6.install, libncursesw6.install, libncurses-dev.install and
+# .links, debian/control
+pkg libtinfo6 usr/libilp32/libtinfo.so.* usr/libilp32/libtic.so.*
+pkg libncurses6 usr/libilp32/libncurses.so.* usr/libilp32/libpanel.so.* usr/libilp32/libform.so.* usr/libilp32/libmenu.so.*
+pkg libncursesw6 usr/libilp32/libncursesw.so.* usr/libilp32/libpanelw.so.* usr/libilp32/libformw.so.* usr/libilp32/libmenuw.so.*
+pkg libncurses-dev usr/aarch64-linux-gnu_ilp32/include/** usr/libilp32/*.so usr/libilp32/*.a usr/libilp32/pkgconfig/*.pc
+dev-depends libncurses-dev libtinfo6-ilp32 libncurses6-ilp32 libncursesw6-ilp32 libc6-dev-ilp32
+drop usr/bin/* -- tic, infocmp, tput and the other programs (Debian's ncurses-bin), and ncurses6-config/ncursesw6-config (same paths as in Debian's libncurses-dev: file conflict; pkg-config gives the same)
+drop usr/share/** -- the terminfo database (Debian's ncurses-base, ncurses-term) and manual pages
+drop usr/libilp32/terminfo -- link to the terminfo database (removed by Debian's rules as well)
+drop etc/** -- terminfo directory (ncurses-base)
+deviation --without-gpm (no ILP32 libgpm); Debian builds the shared libraries with gpm mouse support (loaded with dlopen)
+deviation --host=aarch64-linux-gnu_ilp32 without --build: configure runs its test programs natively
+deviation the ncurses-examples (obj-test) and the terminfo data packages are not built: not part of the set
