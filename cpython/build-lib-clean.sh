@@ -158,6 +158,9 @@ EOF
 chmod 755 /build/run.sh
 runuser -u builder -- /build/run.sh
 # no build machine paths in the install tree
-if grep -rlaF -e /home/ -e /srv/ /build/raw; then echo "build machine paths in the files above"; exit 1; fi
+# (the build machines' own paths; upstream files may well name /home/... in examples, e.g. sqlite3.h)
+if grep -rlaF -e /home/builder -e /home/ubuntu -e /srv/build -e ubuntu-VirtualBox /build/raw; then
+	echo "build machine paths in the files above"; exit 1
+fi
 n=$({ grep -rlaF /build/src/ /build/raw || true; } | wc -l)
 echo "files with /build/src/ (not covered by -ffile-prefix-map): $n" | tee -a /build/build-env.txt

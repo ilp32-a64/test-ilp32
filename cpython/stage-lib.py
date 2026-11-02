@@ -156,7 +156,8 @@ def main():
             if os.path.islink(f):
                 continue
             data = open(f, "rb").read()
-            for bad in (b"/home/", b"/srv/", b"ubuntu-VirtualBox"):
+            # the build machines' own paths (upstream files may name /home/... in examples)
+            for bad in (b"/home/builder", b"/home/ubuntu", b"/srv/build", b"ubuntu-VirtualBox"):
                 if bad in data:
                     die(f"{f}: contains {bad.decode()}")
             if data[:4] == b"\x7fELF" or data[:8] == b"!<arch>\n":
