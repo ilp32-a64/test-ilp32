@@ -1,0 +1,13 @@
+# openssl: debian/libssl3t64.install, debian/openssl-provider-legacy.install, debian/libssl-dev.install,
+# debian/control (libssl3t64 Depends openssl-provider-legacy: a plugin, not visible in NEEDED)
+pkg libssl3t64 usr/libilp32/libcrypto.so.* usr/libilp32/libssl.so.* usr/libilp32/engines-3/*.so
+pkg openssl-provider-legacy usr/libilp32/ossl-modules/legacy.so
+pkg libssl-dev usr/aarch64-linux-gnu_ilp32/include/openssl/*.h usr/libilp32/libcrypto.a usr/libilp32/libssl.a usr/libilp32/libcrypto.so usr/libilp32/libssl.so usr/libilp32/pkgconfig/*.pc usr/libilp32/cmake/OpenSSL/*
+depends libssl3t64 openssl-provider-legacy-ilp32
+dev-depends libssl-dev
+drop usr/bin/* -- the openssl program and c_rehash (Debian's openssl package): no command line tools in the set
+drop usr/lib/ssl/** -- OPENSSLDIR /usr/lib/ssl (openssl.cnf, misc scripts, certs/private dirs) belongs to Debian's openssl package and is shared with it, as agreed
+drop usr/libilp32/ossl-modules/fips.so -- Debian's openssl-provider-fips: not part of the set
+drop usr/share/** -- manual pages and documents (Debian's openssl, libssl-doc)
+deviation target debian-arm64ilp32 (Debian's own ILP32 target in Configurations/20-debian.conf) instead of debian-arm64, --libdir=libilp32: ENGINESDIR /usr/libilp32/engines-3, MODULESDIR /usr/libilp32/ossl-modules
+deviation all headers in /usr/aarch64-linux-gnu_ilp32/include/openssl (Debian: opensslconf.h and configuration.h in /usr/include/<multiarch>/openssl, the others in /usr/include/openssl); the .pc and cmake files point there
