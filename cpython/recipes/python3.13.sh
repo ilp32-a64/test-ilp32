@@ -78,7 +78,7 @@ py_env() {
 	# /usr/libilp32/python3.13), --includedir the ILP32 include directory; native: no --host/--build, no
 	# config_site. Not available for ILP32: --with-dtrace dropped (systemtap), _dbm/_gdbm/_tkinter n/a,
 	# the bluetooth headers absent (they are LP64-only in the chroot)
-	CONFARGS=(--prefix=/usr --libdir="$LIBDIR" --with-platlibdir=libilp32 --includedir="$INCDIR"
+	CONFARGS=(--prefix=/usr --libdir="$LIBDIR" --with-platlibdir=libilp32 --includedir='${prefix}/aarch64-linux-gnu_ilp32/include'
 		--enable-ipv6 --enable-loadable-sqlite-extensions --with-dbmliborder=bdb:gdbm --with-computed-gotos
 		--without-ensurepip --with-system-expat --with-ssl-default-suites=openssl --with-system-libmpdec=no
 		--with-wheel-pkg-dir=/usr/share/python-wheels/ "MKDIR_P=/bin/mkdir -p"
