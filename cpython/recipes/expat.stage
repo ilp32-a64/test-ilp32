@@ -5,3 +5,4 @@ dev-depends libexpat1-dev libc6-dev-ilp32
 drop usr/bin/* -- the xmlwf program (Debian's expat package): no command line tools in the set
 drop usr/share/** -- xmlwf's manual page and the documents
 deviation configure --includedir=/usr/aarch64-linux-gnu_ilp32/include: all headers in the one ILP32 include directory (Debian: expat_config.h in /usr/include/<multiarch>, the others in /usr/include)
+deviation the autotools-made cmake files (expat.cmake, expat-noconfig.cmake) assume libdir lib/<multiarch>; fixed after the install for /usr/libilp32: the prefix one directory less up, headers from the ILP32 include directory, the library relative to the prefix
