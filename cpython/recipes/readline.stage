@@ -1,0 +1,7 @@
+# readline: debian/rules install-stamp (the moves into libreadline8t64 and libreadline-dev), debian/control
+pkg libreadline8t64 usr/libilp32/libhistory.so.* usr/libilp32/libreadline.so.*
+pkg libreadline-dev usr/aarch64-linux-gnu_ilp32/include/readline/*.h usr/libilp32/libhistory.a usr/libilp32/libreadline.a usr/libilp32/libhistory.so usr/libilp32/libreadline.so usr/libilp32/pkgconfig/readline.pc
+dev-depends libreadline-dev libncurses-dev-ilp32
+drop usr/share/** -- manual pages, info manuals and documents (Debian's readline-common, readline-doc)
+deviation CFLAGS -I/usr/aarch64-linux-gnu_ilp32/include/ncursesw instead of -I/usr/include/ncursesw (the ILP32 ncurses headers)
+deviation the udeb build and rlfe (a program) are not built: not part of the set

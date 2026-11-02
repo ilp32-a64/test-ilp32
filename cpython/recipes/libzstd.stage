@@ -5,3 +5,4 @@ dev-depends libzstd-dev
 drop usr/bin/* -- the zstd programs: no command line tools in the set
 drop usr/share/** -- the programs' manual pages
 deviation contrib/pzstd (the pzstd program, Debian's zstd package) not built: no command line tools in the set
+deviation the zstd programs (not packaged) were built without .gz/.xz/.lz4 support: no ILP32 zlib/liblzma/liblz4 development files in the build; libzstd itself uses none of them
