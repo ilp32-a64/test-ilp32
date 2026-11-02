@@ -42,7 +42,9 @@ recipe_install() {
 	local f
 	for f in "$RAW$INCDIR"/*.h; do ln -s "../${f##*/}" "$RAW$INCDIR/ncursesw"; done
 	# install-arch: the static libraries; libncurses.so and libncursesw.so as linker scripts
-	install -m 644 -t "$RAW$LIBDIR" obj-static/lib/*.a obj-wide-static/lib/*.a
+	# (two installs, as the rules: the wide build's libtinfo.a/libtic.a replace the narrow ones)
+	install -m 644 -t "$RAW$LIBDIR" obj-static/lib/*.a
+	install -m 644 -t "$RAW$LIBDIR" obj-wide-static/lib/*.a
 	rm -f "$RAW$LIBDIR/libncurses.so" "$RAW$LIBDIR/libncursesw.so"
 	echo "INPUT(libncurses.so.6 -ltinfo)" > "$RAW$LIBDIR/libncurses.so"
 	echo "INPUT(libncursesw.so.6 -ltinfo)" > "$RAW$LIBDIR/libncursesw.so"
