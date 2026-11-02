@@ -21,5 +21,7 @@ per line, "#" comments; patterns are paths relative to the install tree (fnmatch
   pkg <debian-package> <pattern>...       files of the Debian binary package (staged as <name>-ilp32)
   dev-depends <debian-package> <pkg>...   the -dev package's Depends from debian/control besides its
                                           runtime package, as -ilp32 names (debian adds the versions)
+  extra-pkg <name> <section> <description>   a binary package not in debian/control (before its pkg line)
+  depends <debian-package> <pkg>...       extra runtime Depends the sonames do not show (e.g. plugins)
   drop <pattern> -- <reason>              installed but not packaged, with the reason (in the MANIFEST)
   deviation <text>                        a difference from Debian's build (in the MANIFEST)

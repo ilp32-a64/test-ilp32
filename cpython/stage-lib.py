@@ -80,7 +80,7 @@ def main():
     version = m.group(2) + SUFFIX
 
     # the stage file
-    packages, devdeps, drops, deviations = {}, {}, [], []
+    packages, devdeps, rdeps, drops, deviations = {}, {}, {}, [], []
     for n, line in enumerate(open(stagefile, encoding="utf-8"), 1):
         line = line.strip()
         if not line or line.startswith("#"):
@@ -91,6 +91,15 @@ def main():
             if p not in pkgs:
                 die(f"{stagefile}:{n}: {p} is not in debian/control")
             packages.setdefault(p, []).extend(pats)
+        elif kind == "extra-pkg":
+            # a binary package that is not in this source's debian/control: <name> <section> <description>
+            p, sec, desc = rest.split(None, 2)
+            if p in pkgs:
+                die(f"{stagefile}:{n}: {p} is in debian/control")
+            pkgs[p] = {"Package": p, "Section": sec, "Description": desc}
+        elif kind == "depends":
+            p, *deps = rest.split()
+            rdeps[p] = deps
         elif kind == "dev-depends":
             p, *deps = rest.split()
             devdeps[p] = deps
@@ -160,9 +169,11 @@ def main():
 
     # MANIFEST
     head = subprocess.run(["git", "-C", IT, "log", "-1", "--format=%h"], capture_output=True, text=True).stdout.strip()
-    dirty = subprocess.run(["git", "-C", IT, "status", "--porcelain", "cpython"], capture_output=True, text=True).stdout
+    mine = ["cpython/stage-lib.py", "cpython/build-lib-clean.sh", "cpython/recipes/README",
+            f"cpython/recipes/{source}.sh", f"cpython/recipes/{source}.stage", f"cpython/recipes/{source}.patches"]
+    dirty = subprocess.run(["git", "-C", IT, "status", "--porcelain", "--", *mine], capture_output=True, text=True).stdout
     if dirty:
-        die("test-ilp32 cpython/ has uncommitted changes")
+        die("test-ilp32 has uncommitted changes in the files of this snapshot: " + " ".join(dirty.split()))
     series = os.path.join(src, "debian/patches/series")
     npatch = len([l for l in open(series) if l.strip() and not l.startswith("#")]) if os.path.exists(series) else 0
     env = open(os.path.join(out, "build-env.txt")).read().strip().splitlines()
@@ -177,6 +188,11 @@ def main():
         sec = s.get("Section", srcstanza.get("Section", "UNKNOWN"))
         desc = s.get("Description", "").splitlines()[0].strip()
         L.append(f"  {p}-ilp32  section={sec}  desc={desc} (AArch64 ILP32)  source={source}")
+    if rdeps:
+        L += ["", "depends:"]
+        for p in packages:
+            if p in rdeps:
+                L.append(f"  {p}-ilp32  {', '.join(rdeps[p])}")
     L += ["", "dev-depends:"]
     for p in packages:
         if p in devdeps:
