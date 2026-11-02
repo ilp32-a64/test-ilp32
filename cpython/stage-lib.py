@@ -68,10 +68,14 @@ def readelf(*args):
 def main():
     if len(sys.argv) != 6:
         die(__doc__)
-    source, out, src, stagefile, stage = sys.argv[1:]
+    source, out, src, stagefile, final = sys.argv[1:]
     raw = os.path.join(out, "raw")
+    if os.path.exists(final):
+        die(f"{final} exists: a hand-off is not changed afterwards")
+    # built in <stage>.partial and renamed only when complete: a failed run leaves no snapshot-like directory
+    stage = final + ".partial"
     if os.path.exists(stage):
-        die(f"{stage} exists: a hand-off is not changed afterwards")
+        shutil.rmtree(stage)
     srcstanza, pkgs = control(os.path.join(src, "debian/control"))
     first = open(os.path.join(src, "debian/changelog"), encoding="utf-8").readline()
     m = re.match(r"(\S+) \(([^)]+)\)", first)
@@ -245,6 +249,7 @@ def main():
     L += ["  " + l for l in open(os.path.join(out, "dpkg-l.txt")).read().splitlines()]
     with open(os.path.join(stage, "MANIFEST"), "w", newline="\n") as fh:
         fh.write("\n".join(L) + "\n")
+    os.rename(stage, final)
     for p in packages:
         print(f"{p}-ilp32: {len(assign[p])} files")
     for r, fl in dropped.items():
