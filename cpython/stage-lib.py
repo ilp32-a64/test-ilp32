@@ -237,6 +237,10 @@ def main():
         res = [l for l in blog if l.startswith("check exit ")]
         L.append("  result: " + (res[-1].split(" (")[0] if res else "UNKNOWN") + "; the end of its log:")
         L += ["    " + l for l in open(chk, errors="replace").read().strip().splitlines()[-12:]]
+        # the analysis of the results, written after the build (<build output>/test-notes.txt)
+        notes = os.path.join(out, "test-notes.txt")
+        if os.path.exists(notes):
+            L += ["  notes:"] + ["    " + l for l in open(notes).read().strip().splitlines()]
     else:
         L.append("  (Debian runs none)")
     L += ["", f"checks: {elfs} ELF files/archives all ELF32; shared objects with the BTI property note;",
