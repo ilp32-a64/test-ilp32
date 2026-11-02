@@ -67,7 +67,10 @@ if [ "${1:-}" != inner ]; then
 		echo "toolchain: $TOOLCHAIN"
 	} > "$O/build-env.txt"
 	set +e
-	"$W/clean-chroot.sh" run "py-$SRC" /bin/bash -c "J=$J TOOLCHAIN=$TOOLCHAIN /build/build-lib-clean.sh inner $SRC" > "$O/build.log" 2>&1
+	# env --default-signal: a build started in the background (nohup, &) inherits SIGINT/SIGQUIT/SIGHUP as
+	# ignored, which tests notice (python's test_threading interrupt_main tests spin forever); sbuild does not
+	"$W/clean-chroot.sh" run "py-$SRC" /usr/bin/env --default-signal /bin/bash -c \
+		"J=$J TOOLCHAIN=$TOOLCHAIN /build/build-lib-clean.sh inner $SRC" > "$O/build.log" 2>&1
 	rc=$?
 	set -e
 	tail -3 "$O/build.log"
@@ -80,6 +83,9 @@ fi
 
 # ---- inside the fresh chroot (as root; the build itself runs as the user builder) ----
 SRC=$2
+# no ignored signals (see the env --default-signal above)
+ign=$(sed -n 's/^SigIgn:[[:space:]]*//p' /proc/self/status)
+[ "$((16#$ign))" = 0 ] || { echo "signals ignored in the build (SigIgn $ign)"; exit 1; }
 export DEBIAN_FRONTEND=noninteractive LC_ALL=C.UTF-8 TZ=UTC
 cd /build
 apt-get update
