@@ -1,0 +1,8 @@
+# sqlite3: debian/libsqlite3-0.install, debian/libsqlite3-dev.install, debian/control
+pkg libsqlite3-0 usr/libilp32/libsqlite3.so.*
+pkg libsqlite3-dev usr/aarch64-linux-gnu_ilp32/include/*.h usr/libilp32/libsqlite3.a usr/libilp32/libsqlite3.so usr/libilp32/pkgconfig/sqlite3.pc
+dev-depends libsqlite3-dev libc6-dev-ilp32
+drop usr/bin/* -- the sqlite3 shell: no command line tools in the set
+drop usr/share/** -- the shell's manual page
+deviation configure --disable-tcl instead of --with-tcl (no ILP32 tcl; the tcl binding is Debian's libsqlite3-tcl, not part of the set)
+deviation the icu.so and csv.so extensions and the show*, sqldiff, sqlite3_analyzer and lemon programs are not built (Debian packages neither extension in libsqlite3-0; the programs are not part of the set)
