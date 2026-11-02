@@ -36,7 +36,8 @@ recipe_build() {
 		--enable-load-extension --enable-json --enable-fts4 --enable-fts5 --disable-amalgamation \
 		--libdir="$LIBDIR" --includedir="$INCDIR" --libexecdir="$LIBDIR/sqlite3" SHELL=/bin/sh
 	sed -i "s/\([-ldl .+]\) -ldl/\1/" sqlite3.pc
-	make -j"$J"
+	# build-stamp: $(MAKE), serial (the rules declare no parallel support; sqlite3.h is generated)
+	make
 }
 recipe_install() {
 	sq_flags
