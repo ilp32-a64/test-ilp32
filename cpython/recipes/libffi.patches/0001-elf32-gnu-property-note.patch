@@ -1,0 +1,38 @@
+Description: aarch64/sysv.S: an ELF32 GNU property note for AArch64 ILP32
+ The hand-written .note.gnu.property has the ELF64 layout: 8-byte alignment,
+ a 16-byte descriptor with a padding word. In an ELF32 object (AArch64 ILP32,
+ __ILP32__) notes are 4-byte aligned and the descriptor is 12 bytes, so
+ readelf reports the note as corrupt and it reaches every program linked
+ statically with libffi.a. Emit the ELF32 layout for ILP32; the LP64 note is
+ unchanged.
+Author: liviyifan <344781483+liviyifan@users.noreply.github.com>
+Forwarded: no
+
+--- a/src/aarch64/sysv.S
++++ b/src/aarch64/sysv.S
+@@ -685,6 +685,17 @@
+ 	.section .note.GNU-stack,"",%progbits
+ 
+ 	.pushsection .note.gnu.property, "a";
++#ifdef __ILP32__
++	/* ELF32 (AArch64 ILP32): 4-byte alignment, a 12-byte descriptor */
++	.balign 4;
++	.long 4;
++	.long 0xc;
++	.long 0x5;
++	.asciz "GNU";
++	.long 0xc0000000; /* GNU_PROPERTY_AARCH64_FEATURE_1_AND */
++	.long 4;
++	.long GNU_PROPERTY_AARCH64_BTI | GNU_PROPERTY_AARCH64_POINTER_AUTH;
++#else
+ 	.balign 8;
+ 	.long 4;
+ 	.long 0x10;
+@@ -694,6 +705,7 @@
+ 	.long 4;
+ 	.long GNU_PROPERTY_AARCH64_BTI | GNU_PROPERTY_AARCH64_POINTER_AUTH;
+ 	.long 0;
++#endif
+ 	.popsection;
+ #endif
+ 
