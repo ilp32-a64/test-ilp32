@@ -12,3 +12,4 @@ drop etc/** -- terminfo directory (ncurses-base)
 deviation --without-gpm (no ILP32 libgpm); Debian builds the shared libraries with gpm mouse support (loaded with dlopen)
 deviation --host=aarch64-linux-gnu_ilp32 without --build: configure runs its test programs natively
 deviation the ncurses-examples (obj-test) and the terminfo data packages are not built: not part of the set
+deviation patch 0001: aclocal.m4 and configure.in recognize the host_os linux-gnu_ilp32 as GNU/Linux (_GNU_SOURCE), as they do linux-gnux32
