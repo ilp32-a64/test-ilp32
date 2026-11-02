@@ -5,3 +5,4 @@ dev-depends libreadline-dev libncurses-dev-ilp32
 drop usr/share/** -- manual pages, info manuals and documents (Debian's readline-common, readline-doc)
 deviation CFLAGS -I/usr/aarch64-linux-gnu_ilp32/include/ncursesw instead of -I/usr/include/ncursesw (the ILP32 ncurses headers)
 deviation the udeb build and rlfe (a program) are not built: not part of the set
+drop usr/libilp32/pkgconfig/history.pc -- not in Debian's libreadline-dev (its install step moves only readline.pc)
