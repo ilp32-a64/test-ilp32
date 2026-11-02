@@ -1,0 +1,104 @@
+Description: site, sysconfig: AArch64 ILP32 dist-packages of its own
+ Debian's distutils-install-layout.diff and sysconfig-debian-schemes.diff
+ give the interpreter /usr/local/lib/python3.X/dist-packages,
+ /usr/lib/python3/dist-packages and (platlibdir not "lib") also
+ /usr/lib/python3.X/dist-packages, and install into the first (pip,
+ posix_local scheme) or /usr/lib/python3/dist-packages (deb_system scheme,
+ setuptools' distutils with --install-layout=deb). For an interpreter built
+ with --with-platlibdir=libilp32 these are the LP64 python3.X's
+ directories: its extension modules would be tried (.abi3.so, .so) and
+ ILP32 installs would land among LP64 ones.
+ .
+ With sys.platlibdir == "libilp32" only, use the ILP32 counterparts:
+ /usr/local/libilp32/python3.X/dist-packages, /usr/libilp32/python3/dist-packages
+ and /usr/libilp32/python3.X/dist-packages on sys.path, the first two as
+ posix_local and deb_system purelib/platlib and in _distutils_system_mod.
+ In a virtual environment the environment's lib/ and libilp32/
+ site-packages (posix_venv purelib and platlib) are added for the
+ environment's prefix only; Debian's code adds only lib/ (the same as
+ platlib when platlibdir is "lib"). test_site expects the ILP32 list.
+ Every other platlibdir, Debian's "lib" included, takes the unchanged code.
+Author: liviyifan <344781483+liviyifan@users.noreply.github.com>
+Forwarded: no
+
+--- a/Lib/site.py
++++ b/Lib/site.py
+@@ -412,6 +412,26 @@
+             if sys.platlibdir != "lib":
+                 libdirs.append("lib")
+ 
++            if sys.platlibdir == "libilp32":
++                # AArch64 ILP32: only its own directories, the counterparts
++                # of Debian's below; none of the LP64 interpreter's in lib/
++                if is_virtual_environment and prefix not in (sys.base_prefix,
++                                                             sys.base_exec_prefix):
++                    for libdir in libdirs:
++                        sitepackages.append(os.path.join(prefix, libdir,
++                                                         "python%d.%d" % sys.version_info[:2],
++                                                         "site-packages"))
++                sitepackages.append(os.path.join(prefix, "local", sys.platlibdir,
++                                                 "python%d.%d" % sys.version_info[:2],
++                                                 "dist-packages"))
++                sitepackages.append(os.path.join(prefix, sys.platlibdir,
++                                                 "python3",
++                                                 "dist-packages"))
++                sitepackages.append(os.path.join(prefix, sys.platlibdir,
++                                                 f"{implementation}{ver[0]}.{ver[1]}{abi_thread}",
++                                                 "dist-packages"))
++                continue
++
+             if is_virtual_environment:
+                 sitepackages.append(os.path.join(prefix, "lib",
+                                                  "python%d.%d" % sys.version_info[:2],
+--- a/Lib/sysconfig/__init__.py
++++ b/Lib/sysconfig/__init__.py
+@@ -260,6 +260,17 @@
+ 
+ _PYTHON_BUILD = is_python_build()
+ 
++if sys.platlibdir == "libilp32":
++    # AArch64 ILP32: Debian's schemes with its own dist-packages directories
++    # (/usr/libilp32/python3, /usr/local/libilp32/python3.X), not the LP64
++    # interpreter's in lib/
++    _INSTALL_SCHEMES['deb_system']['purelib'] = '{base}/{platlibdir}/python3/dist-packages'
++    _INSTALL_SCHEMES['deb_system']['platlib'] = '{platbase}/{platlibdir}/python3/dist-packages'
++    _INSTALL_SCHEMES['posix_local']['purelib'] = \
++        '{base}/local/{platlibdir}/python{py_version_short}/dist-packages'
++    _INSTALL_SCHEMES['posix_local']['platlib'] = \
++        '{platbase}/local/{platlibdir}/python{py_version_short}/dist-packages'
++
+ if _PYTHON_BUILD:
+     for scheme in ('posix_prefix', 'posix_home', 'posix_local', 'deb_system'):
+         # On POSIX-y platforms, Python will:
+--- a/Lib/_distutils_system_mod.py
++++ b/Lib/_distutils_system_mod.py
+@@ -108,6 +108,9 @@
+     if standard_lib:
+         return libpython
+     elif is_default_prefix and not is_virtual_environment():
++        if sys.platlibdir == "libilp32":
++            # AArch64 ILP32: its own dist-packages
++            return os.path.join(prefix, sys.platlibdir, "python3", "dist-packages")
+         return os.path.join(prefix, "lib", "python3", "dist-packages")
+     else:
+         return os.path.join(libpython, "site-packages")
+--- a/Lib/test/test_site.py
++++ b/Lib/test/test_site.py
+@@ -325,6 +325,17 @@
+         dirs = site.getsitepackages()
+         if os.sep == '/':
+             # OS X, Linux, FreeBSD, etc
++            if sys.platlibdir == "libilp32":
++                # AArch64 ILP32: its own directories
++                self.assertEqual(dirs, [
++                    os.path.join('xoxo', 'local', 'libilp32',
++                                 f'python{sysconfig._get_python_version_abi()}',
++                                 'dist-packages'),
++                    os.path.join('xoxo', 'libilp32', 'python3', 'dist-packages'),
++                    os.path.join('xoxo', 'libilp32',
++                                 f'python{sysconfig._get_python_version_abi()}',
++                                 'dist-packages')])
++                return
+             if sys.platlibdir != "lib":
+                 self.assertEqual(len(dirs), 3)
+                 wanted = os.path.join('xoxo', 'local', 'lib',

@@ -1,0 +1,63 @@
+Description: site, sysconfig: AArch64 ILP32 user site of its own
+ The user site is ~/.local/lib/python3.X/site-packages (site._get_path(),
+ posix_user purelib and platlib; upstream keeps platlib in lib/ on purpose,
+ bpo-44860), which the LP64 python3.X uses as well: ILP32 extension modules
+ and LP64 ones would share it, and pip --user of one interpreter would
+ replace the other's packages.
+ .
+ With sys.platlibdir == "libilp32" only, the user site is
+ ~/.local/libilp32/python3.X/site-packages (site._get_path() and posix_user
+ purelib/platlib) and posix_user include is
+ ~/.local/aarch64-linux-gnu_ilp32/include/python3.X, as the system headers
+ (patch 0004). User scripts stay in ~/.local/bin. test_sysconfig's
+ test_user_similar expects the ILP32 user site. Other platlibdirs,
+ Debian's "lib" included, are unchanged.
+Author: liviyifan <344781483+liviyifan@users.noreply.github.com>
+Forwarded: no
+
+--- a/Lib/site.py
++++ b/Lib/site.py
+@@ -333,6 +333,10 @@
+     if sys.platform == 'darwin' and sys._framework:
+         return f'{userbase}/lib/{implementation_lower}/site-packages'
+ 
++    if sys.platlibdir == "libilp32":
++        # AArch64 ILP32: its own user site, not the LP64 interpreter's lib/
++        return f'{userbase}/{sys.platlibdir}/python{version[0]}.{version[1]}{abi_thread}/site-packages'
++
+     return f'{userbase}/lib/python{version[0]}.{version[1]}{abi_thread}/site-packages'
+ 
+ 
+--- a/Lib/sysconfig/__init__.py
++++ b/Lib/sysconfig/__init__.py
+@@ -282,6 +282,16 @@
+             '{installed_platbase}/aarch64-linux-gnu_ilp32/include/python{py_version_short}{abiflags}'
+     del _scheme
+ 
++if sys.platlibdir == "libilp32" and 'posix_user' in _INSTALL_SCHEMES:
++    # AArch64 ILP32: its own user site (site._get_path() matches) and user
++    # include directory under ~/.local; the scripts stay in ~/.local/bin
++    _INSTALL_SCHEMES['posix_user']['purelib'] = \
++        '{userbase}/{platlibdir}/{implementation_lower}{py_version_short}{abi_thread}/site-packages'
++    _INSTALL_SCHEMES['posix_user']['platlib'] = \
++        '{userbase}/{platlibdir}/{implementation_lower}{py_version_short}{abi_thread}/site-packages'
++    _INSTALL_SCHEMES['posix_user']['include'] = \
++        '{userbase}/aarch64-linux-gnu_ilp32/include/{implementation_lower}{py_version_short}{abi_thread}'
++
+ if _PYTHON_BUILD:
+     for scheme in ('posix_prefix', 'posix_home', 'posix_local', 'deb_system'):
+         # On POSIX-y platforms, Python will:
+--- a/Lib/test/test_sysconfig.py
++++ b/Lib/test/test_sysconfig.py
+@@ -433,6 +433,11 @@
+                     suffix = f'python{py_version_abi}/site-packages'
+                     expected = expected.replace(f'/{sys.platlibdir}/{suffix}',
+                                                 f'/lib/{suffix}')
++                if sys.platlibdir == "libilp32" and name in ('purelib', 'platlib'):
++                    # AArch64 ILP32: its own user site
++                    expected = os.path.join(
++                        user, sys.platlibdir,
++                        f'python{sysconfig._get_python_version_abi()}', 'site-packages')
+                 self.assertEqual(user_path, expected)
+ 
+     def test_main(self):

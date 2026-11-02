@@ -1,0 +1,27 @@
+Description: sysconfig: report linux-aarch64_ilp32 on AArch64 ILP32
+ An AArch64 ILP32 python reported linux-aarch64, and packaging (pip) takes
+ linux_aarch64 with 32-bit pointers for 32-bit ARM: its tags became
+ linux_armv8l/armv7l, so pip would install AArch32 wheels from PyPI that
+ cannot be loaded. With its own platform the tags are linux_aarch64_ilp32
+ and any. Only the run-time path changes: cross builds set
+ _PYTHON_HOST_PLATFORM, which is returned before this code. In 3.13.5 the
+ linux branch has an android sub-branch; the check goes into its non-android
+ (else) part, so glibc Linux gives "linux-aarch64_ilp32". Same change as
+ the OpenWrt 3.13.15 patch 028-sysconfig-aarch64_ilp32-platform.patch.
+Author: liviyifan <344781483+liviyifan@users.noreply.github.com>
+Forwarded: no
+
+--- a/Lib/sysconfig/__init__.py
++++ b/Lib/sysconfig/__init__.py
+@@ -688,6 +688,11 @@
+                 "armv7l": "armeabi_v7a",
+             }[machine]
+         else:
++            # AArch64 ILP32 (32-bit pointers, AArch64 instructions): its own
++            # platform, so that wheel tags do not take it for 32-bit ARM
++            # (packaging maps linux_aarch64 with 32-bit pointers to armv8l)
++            if machine == "aarch64" and sys.maxsize < 2**32:
++                machine = "aarch64_ilp32"
+             # At least on Linux/Intel, 'machine' is the processor --
+             # i386, etc.
+             # XXX what about Alpha, SPARC, etc?

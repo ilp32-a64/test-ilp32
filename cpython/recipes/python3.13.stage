@@ -1,0 +1,39 @@
+# python3.13: the install target of debian/rules (dh_movefiles/dh_link per package), debian/control; the four
+# packages agreed for ILP32 instead of Debian's split:
+#   python3.13-ilp32      Debian's python3.13 + python3.13-minimal + libpython3.13-minimal + libpython3.13-stdlib
+#                         + python3.13-venv (ensurepip): the interpreter, the standard library, lib-dynload
+#   libpython3.13-ilp32   Debian's libpython3.13 (with its config-3.13-<triplet>/libpython3.13.so link)
+#   python3.13-dev-ilp32  Debian's python3.13-dev + libpython3.13-dev
+#   python3-ilp32         the python3-ilp32 command (Debian: python3-minimal of python3-defaults, not in this
+#                         source's debian/control: needs the proposed "extra-pkg" line kind in stage-lib.py)
+# The standard library's directories are listed one by one: the config directory belongs to the -dev package
+# and a pattern cannot exclude it.
+pkg python3.13 usr/bin/python3.13-ilp32 usr/bin/pydoc3.13-ilp32 usr/bin/pdb3.13-ilp32 usr/bin/pygettext3.13-ilp32 usr/libilp32/python3.13/* usr/libilp32/python3.13/lib-dynload/*
+pkg python3.13 usr/libilp32/python3.13/asyncio/** usr/libilp32/python3.13/collections/** usr/libilp32/python3.13/concurrent/** usr/libilp32/python3.13/ctypes/** usr/libilp32/python3.13/curses/** usr/libilp32/python3.13/dbm/** usr/libilp32/python3.13/email/** usr/libilp32/python3.13/encodings/** usr/libilp32/python3.13/ensurepip/** usr/libilp32/python3.13/html/** usr/libilp32/python3.13/http/** usr/libilp32/python3.13/importlib/** usr/libilp32/python3.13/json/** usr/libilp32/python3.13/logging/** usr/libilp32/python3.13/multiprocessing/** usr/libilp32/python3.13/pathlib/** usr/libilp32/python3.13/__phello__/** usr/libilp32/python3.13/pydoc_data/** usr/libilp32/python3.13/_pyrepl/** usr/libilp32/python3.13/re/** usr/libilp32/python3.13/sqlite3/** usr/libilp32/python3.13/sysconfig/** usr/libilp32/python3.13/tomllib/** usr/libilp32/python3.13/unittest/** usr/libilp32/python3.13/urllib/** usr/libilp32/python3.13/venv/** usr/libilp32/python3.13/wsgiref/** usr/libilp32/python3.13/xml/** usr/libilp32/python3.13/xmlrpc/** usr/libilp32/python3.13/zipfile/** usr/libilp32/python3.13/zoneinfo/**
+# rules 1100-1104: the test framework of libpython3.13-stdlib
+pkg python3.13 usr/libilp32/python3.13/test/libregrtest/** usr/libilp32/python3.13/test/support/** usr/libilp32/python3.13/test/typinganndata/** usr/libilp32/python3.13/test/regrtest.py usr/libilp32/python3.13/test/test_support.py usr/libilp32/python3.13/test/__init__.py usr/libilp32/python3.13/test/__main__.py
+pkg libpython3.13 usr/libilp32/libpython3.13.so.* usr/libilp32/python3.13/config-3.13-aarch64_ilp32-linux-gnu/libpython3.13.so
+pkg python3.13-dev usr/bin/python3.13-ilp32-config usr/aarch64-linux-gnu_ilp32/include/python3.13/** usr/libilp32/libpython3.13.a usr/libilp32/libpython3.13.so usr/libilp32/pkgconfig/python-3.13.pc usr/libilp32/pkgconfig/python-3.13-embed.pc
+pkg python3.13-dev usr/libilp32/python3.13/config-3.13-aarch64_ilp32-linux-gnu/*.a usr/libilp32/python3.13/config-3.13-aarch64_ilp32-linux-gnu/python.o usr/libilp32/python3.13/config-3.13-aarch64_ilp32-linux-gnu/Makefile usr/libilp32/python3.13/config-3.13-aarch64_ilp32-linux-gnu/Setup* usr/libilp32/python3.13/config-3.13-aarch64_ilp32-linux-gnu/config.c* usr/libilp32/python3.13/config-3.13-aarch64_ilp32-linux-gnu/makesetup usr/libilp32/python3.13/config-3.13-aarch64_ilp32-linux-gnu/install-sh usr/libilp32/python3.13/config-3.13-aarch64_ilp32-linux-gnu/python-config.py
+# python3.13-dev + libpython3.13-dev Depends (debian/control) besides libpython3.13: python3.13, libexpat1-dev, zlib1g-dev
+dev-depends python3.13-dev python3.13-ilp32 libexpat1-dev-ilp32 zlib1g-dev-ilp32
+extra-pkg python3 python interactive high-level object-oriented language (default python3 version)
+pkg python3 usr/bin/python3-ilp32
+drop usr/bin/idle3.13 -- IDLE (Debian's idle-python3.13): needs tkinter
+drop usr/libilp32/python3.13/idlelib/** -- IDLE (Debian's idle-python3.13): needs tkinter
+drop usr/libilp32/python3.13/tkinter/** -- Debian's python3.13-tk: no ILP32 Tcl/Tk, _tkinter not built
+drop usr/libilp32/python3.13/turtledemo/** -- Debian's python3.13-examples: needs tkinter
+drop usr/share/** -- the manual page python3.13.1: Debian's path (python3.13-minimal)
+deviation layout: --libdir=/usr/libilp32 (rules: /usr/lib/$(DEB_HOST_MULTIARCH)), --with-platlibdir=libilp32 (stdlib, lib-dynload and config-3.13-aarch64_ilp32-linux-gnu in /usr/libilp32/python3.13; Debian: /usr/lib/python3.13), --includedir=/usr/aarch64-linux-gnu_ilp32/include
+deviation pyconfig.h is installed with the other headers (Makefile CONFINCLUDEDIR = $(INCLUDEDIR) after configure); Debian moves it to /usr/include/$(DEB_HOST_MULTIARCH)/python3.13 and installs debian/multiarch.h.in as pyconfig.h; python-3.13.pc gets no extra Cflags directory
+deviation the triplet in sysconfigdata, config directory and EXT_SUFFIX is CPython's aarch64_ilp32-linux-gnu (DEB_HOST_MULTIARCH aarch64-linux-gnu in Debian's arm64 build)
+deviation commands with ILP32 names: /usr/bin/python3.13-ilp32, pydoc3.13-ilp32, pdb3.13-ilp32 (-> ../libilp32/python3.13/pdb.py), pygettext3.13-ilp32 and python3.13-ilp32-config (Debian: python3.13, pydoc3.13, pdb3.13, pygettext3.13, python3.13-config -> aarch64-linux-gnu-python3.13-config); idle-python3.13 not installed
+deviation not built: _dbm and _gdbm (py_cv_module_*=n/a; no ILP32 Berkeley DB or gdbm), _tkinter (n/a; no ILP32 Tcl/Tk), bluetooth sockets (header checks set to no; no ILP32 libbluetooth), --with-dtrace not passed (no ILP32 systemtap sdt); Debian passes --with-valgrind only to its debug flavours, not built here
+deviation the perf trampoline (Python/asm_trampoline.S) is not built: configure enables it only for the aarch64-linux-gnu and x86_64-linux-gnu triplets
+deviation flavours not built: nopie (python3.13-nopie: in trixie the same flags as the static interpreter), debug and shared-debug (python3.13-dbg, libpython3.13-dbg), the documentation (python3.13-doc), the examples
+deviation tests: stamp-mincheck and make test of the static and shared flavours as the rules do (on_buildd conditions: -network,-urlfetch and the buildd excludes); the debug flavour's test run is not done
+deviation not installed (Debian's paths, same files as the LP64 packages or LP64-specific): /etc/python3.13/sitecustomize.py and its link, /usr/share/man, binfmt files, desktop entry and pixmap, /usr/src/python3.13 (Grammar/python.gram, Parser/Python.asdl)
+deviation ILP32 site directories (patch 0003): sys.path has /usr/local/libilp32/python3.13/dist-packages, /usr/libilp32/python3/dist-packages and /usr/libilp32/python3.13/dist-packages instead of Debian's /usr/local/lib/python3.13/dist-packages, /usr/lib/python3/dist-packages, /usr/lib/python3.13/dist-packages; posix_local and deb_system purelib/platlib point there; the empty /usr/libilp32/python3/dist-packages directory (rules 904-907, 1181: /usr/lib/python3/dist-packages) is in the install tree but carries no file; scripts of pip installs stay in Debian's /usr/local/bin (posix_local scripts unchanged), shared with the LP64 python3.13 on purpose
+deviation ILP32 user site (patch 0005): ~/.local/libilp32/python3.13/site-packages (site.USER_SITE, posix_user purelib/platlib) instead of ~/.local/lib/python3.13/site-packages, posix_user include ~/.local/aarch64-linux-gnu_ilp32/include/python3.13; user scripts stay in ~/.local/bin
+deviation sysconfig include/platinclude (posix_prefix, posix_venv, posix_local, deb_system) and get_config_h_filename(): /usr/aarch64-linux-gnu_ilp32/include/python3.13 (patch 0004); stdlib/platstdlib of Debian's schemes from {platlibdir} (patch 0002)
+deviation the complete testsuite (Debian's libpython3.13-testsuite) is not installed; the test framework (test/libregrtest, support, typinganndata, regrtest.py) is, as in libpython3.13-stdlib

@@ -1,0 +1,51 @@
+Description: sysconfig: AArch64 ILP32 include directory
+ The ILP32 build installs its headers, pyconfig.h included, in
+ /usr/aarch64-linux-gnu_ilp32/include/python3.X (configure --includedir;
+ INCLUDEPY and CONFINCLUDEPY say so), but the schemes' include and
+ platinclude are {installed_base}/include/python3.X: /usr/include/python3.X,
+ the LP64 interpreter's headers, whose Debian pyconfig.h wrapper selects the
+ LP64 aarch64-linux-gnu pyconfig.h for any __aarch64__. Tools taking
+ sysconfig.get_paths() (meson, pip/setuptools via get_path('include')) and
+ get_config_h_filename() (Debian: get_path('platinclude', 'posix_prefix'))
+ would see those.
+ .
+ With sys.platlibdir == "libilp32" only, include and platinclude of
+ posix_prefix, posix_venv (the "venv" scheme), posix_local and deb_system
+ are {installed_base}/aarch64-linux-gnu_ilp32/include/python3.X. The build
+ tree override below (srcdir/Include) still applies. test_sysconfig's
+ posix_venv check expects that directory. Other platlibdirs: unchanged.
+Author: liviyifan <344781483+liviyifan@users.noreply.github.com>
+Forwarded: no
+
+--- a/Lib/sysconfig/__init__.py
++++ b/Lib/sysconfig/__init__.py
+@@ -271,6 +271,17 @@
+     _INSTALL_SCHEMES['posix_local']['platlib'] = \
+         '{platbase}/local/{platlibdir}/python{py_version_short}/dist-packages'
+ 
++if sys.platlibdir == "libilp32":
++    # AArch64 ILP32: the headers (pyconfig.h too) are in
++    # /usr/aarch64-linux-gnu_ilp32/include/python3.X (configure --includedir),
++    # not in the LP64 interpreter's /usr/include/python3.X
++    for _scheme in ('posix_prefix', 'posix_venv', 'posix_local', 'deb_system'):
++        _INSTALL_SCHEMES[_scheme]['include'] = \
++            '{installed_base}/aarch64-linux-gnu_ilp32/include/python{py_version_short}{abiflags}'
++        _INSTALL_SCHEMES[_scheme]['platinclude'] = \
++            '{installed_platbase}/aarch64-linux-gnu_ilp32/include/python{py_version_short}{abiflags}'
++    del _scheme
++
+ if _PYTHON_BUILD:
+     for scheme in ('posix_prefix', 'posix_home', 'posix_local', 'deb_system'):
+         # On POSIX-y platforms, Python will:
+--- a/Lib/test/test_sysconfig.py
++++ b/Lib/test/test_sysconfig.py
+@@ -165,6 +165,9 @@
+         # before bpo-45413, here we assert the posix_venv scheme does not regress
+         binpath = 'bin'
+         incpath = 'include'
++        if sys.platlibdir == "libilp32":
++            # AArch64 ILP32: headers in aarch64-linux-gnu_ilp32/include
++            incpath = os.path.join('aarch64-linux-gnu_ilp32', 'include')
+         libpath = os.path.join('lib',
+                                f'python{sysconfig._get_python_version_abi()}',
+                                'site-packages')
