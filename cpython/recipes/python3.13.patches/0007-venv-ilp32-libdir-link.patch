@@ -1,0 +1,39 @@
+From: liviyifan <344781483+liviyifan@users.noreply.github.com>
+Subject: venv: link libilp32 to lib on AArch64 ILP32
+
+venv links lib64 to lib on 64-bit POSIX (Issue 21197), so that the platlib
+path ({platlibdir}) and purelib (lib) are one directory. On ILP32
+sys.maxsize is 2**31-1 and platlibdir is libilp32: no link is made and a
+venv has two site-packages directories. site.py adds both, so imports work,
+but code that takes only platlib as the venv's site-packages misses what pip
+put in purelib (test_peg_generator's TestCParser: setuptools). Link
+libilp32 to lib the same way, and check it in test_venv.
+---
+--- a/Lib/test/test_venv.py
++++ b/Lib/test/test_venv.py
+@@ -147,6 +147,9 @@
+             self.assertTrue(os.path.islink(p))
+         else:
+             self.assertFalse(os.path.exists(p))
++        # AArch64 ILP32: libilp32 is a link to lib
++        if sys.platlibdir == 'libilp32' and os.name == 'posix':
++            self.assertTrue(os.path.islink(self.get_env_file('libilp32')))
+         data = self.get_text_file_contents('pyvenv.cfg')
+         executable = sys._base_executable
+         path = os.path.dirname(executable)
+--- a/Lib/venv/__init__.py
++++ b/Lib/venv/__init__.py
+@@ -188,6 +188,13 @@
+             link_path = os.path.join(env_dir, 'lib64')
+             if not os.path.exists(link_path):   # Issue #21643
+                 os.symlink('lib', link_path)
++        # AArch64 ILP32: platlibdir is libilp32 and the 64-bit lib64 link above is
++        # not made; link libilp32 to lib the same way, so that purelib and platlib
++        # are one directory in a venv
++        if sys.platlibdir == 'libilp32' and os.name == 'posix':
++            link_path = os.path.join(env_dir, sys.platlibdir)
++            if not os.path.exists(link_path):
++                os.symlink('lib', link_path)
+         context.bin_path = binpath
+         context.bin_name = os.path.relpath(binpath, env_dir)
+         context.env_exe = os.path.join(binpath, exename)
