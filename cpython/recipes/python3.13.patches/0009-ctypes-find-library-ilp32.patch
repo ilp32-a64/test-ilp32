@@ -1,0 +1,123 @@
+From: liviyifan <344781483+liviyifan@users.noreply.github.com>
+Subject: ctypes.util.find_library: search as the AArch64 ILP32 ld.so does
+
+On an ILP32 system next to Debian arm64, find_library() answers from LP64
+sources: the ldconfig cache has only the LP64 libraries (/etc/ld.so.conf lists
+the LP64 directories), and gcc, ld and objdump are the LP64 tools when they
+are installed at all. A soname that exists only for LP64 is returned (libacl.so.1
+with no ILP32 libacl), and an ILP32 library only on LD_LIBRARY_PATH is not found
+(test_find_on_libpath).
+
+With sys.platlibdir == "libilp32", search LD_LIBRARY_PATH, the ldconfig cache,
+then /libilp32 and /usr/libilp32 (the ILP32 ld.so's order and system
+directories), take only ELF32 little-endian AArch64 files, and read DT_SONAME
+from the file. No external tool is needed.
+---
+--- a/Lib/ctypes/util.py
++++ b/Lib/ctypes/util.py
+@@ -341,6 +341,105 @@
+             return _findSoname_ldconfig(name) or \
+                    _get_soname(_findLib_gcc(name)) or _get_soname(_findLib_ld(name))
+ 
++        if sys.platlibdir == 'libilp32':
++            # AArch64 ILP32: the ldconfig cache lists the LP64 libraries (its
++            # entries' names are the same as the ILP32 ones), and gcc, ld and
++            # objdump, if there at all, are the LP64 tools. Search as the ILP32
++            # ld.so does instead: LD_LIBRARY_PATH, the cache, then /libilp32 and
++            # /usr/libilp32, taking only ELF32 AArch64 files, and read DT_SONAME
++            # from the file itself.
++
++            def _is_elf_ilp32(filename):
++                "Return True if the given file is an ELF32 little-endian AArch64 file"
++                try:
++                    with open(filename, 'rb') as f:
++                        header = f.read(20)
++                except OSError:
++                    return False
++                return (len(header) == 20 and header[:4] == b'\x7fELF' and
++                        header[4] == 1 and header[5] == 1 and
++                        int.from_bytes(header[18:20], 'little') == 183)
++
++            def _get_soname_ilp32(filename):
++                "Return DT_SONAME of an ELF32 little-endian file, or None"
++                import struct
++                try:
++                    with open(filename, 'rb') as f:
++                        header = f.read(52)
++                        phoff, = struct.unpack_from('<I', header, 28)
++                        phentsize, phnum = struct.unpack_from('<HH', header, 42)
++                        loads = []
++                        dynamic = None
++                        for i in range(phnum):
++                            f.seek(phoff + i * phentsize)
++                            p_type, p_offset, p_vaddr, _, p_filesz = \
++                                struct.unpack('<IIIII', f.read(20))
++                            if p_type == 1:     # PT_LOAD
++                                loads.append((p_vaddr, p_offset, p_filesz))
++                            elif p_type == 2:   # PT_DYNAMIC
++                                dynamic = (p_offset, p_filesz)
++                        if dynamic is None:
++                            return None
++                        f.seek(dynamic[0])
++                        data = f.read(dynamic[1])
++                        strtab = soname = None
++                        for tag, val in struct.iter_unpack('<iI', data[:len(data) // 8 * 8]):
++                            if tag == 0:        # DT_NULL
++                                break
++                            if tag == 5:        # DT_STRTAB
++                                strtab = val
++                            elif tag == 14:     # DT_SONAME
++                                soname = val
++                        if strtab is None or soname is None:
++                            return None
++                        for vaddr, offset, filesz in loads:
++                            if vaddr <= strtab < vaddr + filesz:
++                                f.seek(offset + strtab - vaddr + soname)
++                                name = f.read(256).split(b'\0', 1)[0]
++                                return os.fsdecode(name) or None
++                except (OSError, struct.error):
++                    pass
++                return None
++
++            def _version_key(filename):
++                # libfoo.so first, then libfoo.so.N... newest first
++                parts = filename.partition('.so')[2].split('.')[1:]
++                return [-int(x) if x.isdigit() else 0 for x in parts]
++
++            def _ldconfig_paths_ilp32(name):
++                regex = os.fsencode(r'\s+lib%s\.so[^\s]*\s+\([^)]*\)\s+=>\s+([^\s]+)'
++                                    % re.escape(name))
++                try:
++                    with subprocess.Popen(['/sbin/ldconfig', '-p'],
++                                          stdin=subprocess.DEVNULL,
++                                          stderr=subprocess.DEVNULL,
++                                          stdout=subprocess.PIPE,
++                                          env={'LC_ALL': 'C', 'LANG': 'C'}) as p:
++                        return [os.fsdecode(x) for x in re.findall(regex, p.stdout.read())]
++                except OSError:
++                    return []
++
++            def _findLib_ilp32(name):
++                prefix = 'lib%s.so' % name
++                def in_dir(d):
++                    try:
++                        entries = os.listdir(d)
++                    except OSError:
++                        return []
++                    found = [e for e in entries if e == prefix or e.startswith(prefix + '.')]
++                    return [os.path.join(d, e) for e in sorted(found, key=_version_key)]
++                libpath = os.environ.get('LD_LIBRARY_PATH', '')
++                candidates = [f for d in libpath.split(':') if d for f in in_dir(d)]
++                candidates += _ldconfig_paths_ilp32(name)
++                candidates += [f for d in ('/libilp32', '/usr/libilp32') for f in in_dir(d)]
++                for f in candidates:
++                    if _is_elf_ilp32(f):
++                        return _get_soname_ilp32(f) or os.path.basename(f)
++                return None
++
++            def find_library(name):
++                return _findLib_ilp32(name)
++
+ ################################################################
+ # test code
+ 
