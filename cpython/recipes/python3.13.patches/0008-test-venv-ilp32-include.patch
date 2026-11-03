@@ -1,0 +1,31 @@
+From: liviyifan <344781483+liviyifan@users.noreply.github.com>
+Subject: test_venv: the ILP32 venv include directory (test only)
+
+Patch 0004 puts the venv scheme's include in aarch64-linux-gnu_ilp32/include
+(and adjusts test_sysconfig), so a venv has no include/ directory. test_venv
+still expected include/: use the ILP32 directory there too. The rules exclude
+test_venv from the build's test run, and the tests are not packaged.
+---
+--- a/Lib/test/test_venv.py
++++ b/Lib/test/test_venv.py
+@@ -79,6 +79,9 @@
+             self.bindir = 'bin'
+             self.lib = ('lib', f'python{sysconfig._get_python_version_abi()}')
+             self.include = 'include'
++            if sys.platlibdir == 'libilp32':
++                # AArch64 ILP32: the venv scheme's include is in aarch64-linux-gnu_ilp32
++                self.include = os.path.join('aarch64-linux-gnu_ilp32', 'include')
+         executable = sys._base_executable
+         self.exe = os.path.split(executable)[-1]
+         if (sys.platform == 'win32'
+@@ -362,6 +365,10 @@
+             ('lib', 'python%d.%d' % sys.version_info[:2]),
+             ('lib', 'python%d.%d' % sys.version_info[:2], 'site-packages'),
+         )
++        if sys.platlibdir == 'libilp32':
++            # AArch64 ILP32: the venv scheme's include is in aarch64-linux-gnu_ilp32
++            ENV_SUBDIRS = tuple(('aarch64-linux-gnu_ilp32',) if d == ('include',) else d
++                                for d in ENV_SUBDIRS)
+ 
+     def create_contents(self, paths, filename):
+         """

@@ -3,11 +3,13 @@
 # The packaged ILP32 set (debian's debs) is installed in a fresh clean chroot; nothing is rebuilt.
 #  test_ctypes         test_dlerror runs a hard-coded "gcc", the LP64 compiler in a build chroot: here "gcc" is
 #                      a link to the ILP32 compiler, first in PATH, for the test only
-#  test_peg_generator  makes a venv with pip and setuptools from WHEEL_PKG_DIR (/usr/share/python-wheels): here
-#                      Debian's python3-pip-whl and python3-setuptools-whl (Architecture: all) are installed
-#  test_venv           excluded by the rules (-x); checks among others the libilp32 -> lib venv link (patch 0007)
-# The test files come from the patched source (Lib/test and Tools only; the set does not ship the test suite),
-# laid out as t/Lib/test and t/Tools so that test.test_tools finds Tools/peg_generator.
+#  test_venv           excluded by the rules (-x); checks among others the libilp32 -> lib venv link (patch 0007);
+#                      its pip tests use WHEEL_PKG_DIR (/usr/share/python-wheels): Debian's python3-pip-whl
+#                      and python3-setuptools-whl (Architecture: all) are installed
+# test_peg_generator is not run here: its C parser tests start an isolated (-I) interpreter, which ignores
+# PYTHONPATH and so imports the installed test package instead of these files. It passes in the build.
+# The test files come from the patched source, made by py-test-tar.sh (the set does not ship the test suite),
+# unpacked as t/ with only Lib/test of Lib/, so that test.test_tools finds the source tree (Tools/, Include/...).
 #   py-test-env.sh            on the board (root), inputs in $W/in/py-test/ (*.deb, tests.tar, SHA256SUMS)
 #   py-test-env.sh inner      in the chroot
 set -euo pipefail
@@ -51,7 +53,7 @@ cd /build/w
 mkdir -p bin t && ln -sf /usr/bin/$T-gcc bin/gcc
 tar -C t -xf /build/in/tests.tar
 echo "== gcc in PATH: $(PATH=/build/w/bin:/usr/bin:/bin gcc -dumpmachine)"
-for tst in test_ctypes test_peg_generator test_venv; do
+for tst in test_ctypes test_venv; do
 	PATH=/build/w/bin:/usr/bin:/bin PYTHONPATH=/build/w/t/Lib timeout 3600 \
 		python3.13-ilp32 -m test -u cpu -v $tst > /build/out/$tst.log 2>&1
 	echo "== $tst: exit $? ($(grep -E '^Total tests:' /build/out/$tst.log | tail -1); $(grep -E '^Result:' /build/out/$tst.log | tail -1))"
