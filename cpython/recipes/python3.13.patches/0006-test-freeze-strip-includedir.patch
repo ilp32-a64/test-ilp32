@@ -1,0 +1,21 @@
+From: liviyifan <344781483+liviyifan@users.noreply.github.com>
+Subject: test_freeze: strip absolute --includedir paths from configure args (ILP32)
+
+Debian's test-freeze-strip-libdir.diff drops an absolute --libdir from the
+interpreter's CONFIG_ARGS before the test configures and installs a copy of
+Python into a private prefix. The ILP32 build also passes an absolute
+--includedir (/usr/aarch64-linux-gnu_ilp32/include); sysconfig expands it,
+so the test's "make install" tries to write there and fails. Drop it the same
+way.
+---
+ Tools/freeze/test/freeze.py | 1 +
+ 1 file changed, 1 insertion(+)
+
+--- a/Tools/freeze/test/freeze.py
++++ b/Tools/freeze/test/freeze.py
+@@ -130,4 +130,5 @@
+     config_args = shlex.split(sysconfig.get_config_var('CONFIG_ARGS') or '')
+     config_args = [arg for arg in config_args if not arg.startswith("--libdir=/")]
++    config_args = [arg for arg in config_args if not arg.startswith("--includedir=/")]
+     cmd = [os.path.join(srcdir, 'configure'), *config_args]
+     ensure_opt(cmd, 'cache-file', os.path.join(outdir, 'python-config.cache'))
