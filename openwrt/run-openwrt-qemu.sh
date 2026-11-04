@@ -25,8 +25,8 @@ RDINIT=$([ "$NOTIME32" = 1 ] && echo rdinit=/notime32-init || true)
 if [ -z "${KERNEL:-}" ] && [ -z "${BUILD_ONLY:-}" ]; then
 	# ILP32 images are in armv8-ilp32 (rules.mk BIN_DIR suffix); older trees used armv8. Release builds put
 	# the version into the file names (openwrt-<version>-armsr-armv8-...)
-	KERNEL=$(ls "$OPENWRT"/bin/targets/armsr/armv8-ilp32/openwrt-*armsr-armv8-generic-initramfs-kernel.bin 2>/dev/null ||
-		ls "$OPENWRT"/bin/targets/armsr/armv8/openwrt-*armsr-armv8-generic-initramfs-kernel.bin)
+	KERNEL=$(ls "$OPENWRT"/bin/targets/armsr/armv8-ilp32/*armsr-armv8-generic-initramfs-kernel.bin 2>/dev/null ||
+		ls "$OPENWRT"/bin/targets/armsr/armv8/*armsr-armv8-generic-initramfs-kernel.bin)
 fi
 
 rm -rf "$OUT"; mkdir -p "$OUT"

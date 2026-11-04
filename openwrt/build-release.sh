@@ -1,8 +1,8 @@
 #!/bin/bash
-# Build an OpenWrt-ILP32 release for one target from a checked-out openwrt-ilp32 tree: feeds as pinned by
+# Build an ILP32Wrt release for one target from a checked-out ilp32wrt tree: feeds as pinned by
 # the tree, toolchain from scratch, release/<target>.config, version strings, no package feed. Collects
 # the release files (and for armsr-armv8 the test programs for the QEMU checks), and checks the public files
-# for build host details. Used by the release workflow of openwrt-ilp32 and on a local machine.
+# for build host details. Used by the release workflow of ilp32wrt and on a local machine.
 #
 # Usage: build-release.sh <openwrt tree> <version> <output directory> [<target>]
 #   version: e.g. 25.12.6-ilp32.1 (CONFIG_VERSION_NUMBER; the tag is v<version>)
@@ -85,8 +85,8 @@ done < <(grep -E '^CONFIG_|^# CONFIG_.* is not set' "$SEED"; echo "CONFIG_VERSIO
 # no package feed: the apk feed list only explains that (the default points to downloads.openwrt.org)
 mkdir -p files/etc/apk/repositories.d
 cat > files/etc/apk/repositories.d/distfeeds.list <<EOF
-# OpenWrt-ILP32 has no package feed: the official OpenWrt packages are not built for ILP32
-# (aarch64_*_ilp32). Build packages from source: https://github.com/ilp32-a64/openwrt-ilp32
+# ILP32Wrt has no package feed: the official OpenWrt packages are not built for ILP32
+# (aarch64_*_ilp32). Build packages from source: https://github.com/ilp32-a64/ilp32wrt
 EOF
 
 # the version strings and the kernel build user/host do not make OpenWrt rebuild what an earlier build of the

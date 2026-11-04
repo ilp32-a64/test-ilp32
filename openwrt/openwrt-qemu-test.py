@@ -99,7 +99,7 @@ def main():
               "ifstatus wan", r'"address": "10\.0\.2\.15"', timeout=90)
     run_check("lan 192.168.1.1", "ifstatus lan", r'"address": "192\.168\.1\.1"')
     run_check("firewall4 (nftables)", "nft list tables", r"table inet fw4")
-    run_check("uci", "uci get system.@system[0].hostname", r"OpenWrt")
+    run_check("uci", "uci get system.@system[0].hostname", r"ILP32Wrt")
     run_check("time: sleep and clock", "a=$(date +%s); sleep 2; b=$(date +%s); [ $((b - a)) -ge 2 ]")
     run_check("musl-test dynamic (image libc)", "LD_LIBRARY_PATH=/usr/lib /tests/musl-test-dynamic", timeout=120)
     run_check("musl-test static", "/tests/musl-test-static", timeout=120)

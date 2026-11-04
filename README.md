@@ -23,7 +23,7 @@ initramfs, run the test programs and power off.
 | `glibc/` | glibc 2.41 for AArch64 ILP32 (`ilp32-a64/glibc-ilp32`, branch `ilp32-2.41`, 64-bit `time_t`): cross toolchain `aarch64-linux-gnu_ilp32` with GCC 14.3.0 and binutils 2.44 (`toolchain/`; GCC with the ILP32 fixes in `toolchain/patches/`), `build-glibc.sh`, `rebuild-all.sh`, LP64 regression check (`lp64-check.sh`), QEMU tests (`test/`) |
 | `qemu/notime32-init.c` | `/init` for `NOTIME32=1` test runs (see below) |
 | `pac/` | pointer authentication (PAC), BTI, SVE and SME tests, ILP32 next to LP64 (`build.sh` adds them to the `qemu/` initramfs, `run.sh` boots a kernel with `ARM64_PTR_AUTH` on QEMU `-cpu max`; see below) |
-| `openwrt/` | QEMU tests of an OpenWrt armsr/armv8 ILP32 image (`ilp32-a64/openwrt-ilp32`, branch `ilp32-25.12`) |
+| `openwrt/` | QEMU tests of an OpenWrt armsr/armv8 ILP32 image (`ilp32-a64/ilp32wrt`, branch `ilp32-25.12`) |
 
 ## Tests
 
