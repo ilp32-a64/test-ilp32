@@ -23,7 +23,6 @@ initramfs, run the test programs and power off.
 | `glibc/` | glibc 2.41 for AArch64 ILP32 (`ilp32-a64/glibc-ilp32`, branch `ilp32-2.41`, 64-bit `time_t`): cross toolchain `aarch64-linux-gnu_ilp32` with GCC 14.3.0 and binutils 2.44 (`toolchain/`; GCC with the ILP32 fixes in `toolchain/patches/`), `build-glibc.sh`, `rebuild-all.sh`, LP64 regression check (`lp64-check.sh`), QEMU tests (`test/`) |
 | `qemu/notime32-init.c` | `/init` for `NOTIME32=1` test runs (see below) |
 | `pac/` | pointer authentication (PAC), BTI, SVE and SME tests, ILP32 next to LP64 (`build.sh` adds them to the `qemu/` initramfs, `run.sh` boots a kernel with `ARM64_PTR_AUTH` on QEMU `-cpu max`; see below) |
-| `openwrt/` | QEMU tests of an OpenWrt armsr/armv8 ILP32 image (`ilp32-a64/ilp32wrt`, branch `ilp32-25.12`) |
 
 ## Tests
 
@@ -114,23 +113,10 @@ run had no busybox).
 
 ## OpenWrt
 
-`openwrt/run-openwrt-qemu.sh` boots the armsr/armv8 ILP32 initramfs image of an OpenWrt tree
-(`OPENWRT`, default `~/work/openwrt-ilp32`, built with the AArch64 ILP32 user-land ABI) in QEMU and checks
-it over the serial console (`openwrt-qemu-test.py`, Python 3 with pexpect). The image is not changed: a
-second initramfs (`-initrd`) adds the test programs, built with the toolchain of the OpenWrt tree. Checks:
-boot, kernel version, the ILP32 dynamic linker, ubus, the procd services, WAN by DHCP and LAN, firewall4,
-uci, time, `musl-test` (dynamic with the C library of the image, and static), `syscall-test`, and no
-crashes in `logread` or warnings in `dmesg`. `NOTIME32=1` runs the whole system (procd and everything it
-starts) under the seccomp filter of `qemu/notime32-init.c`. The exit code is the number of failed checks.
-
-```
-openwrt/run-openwrt-qemu.sh                          # QEMU_CPU, default cortex-a53
-NOTIME32=1 openwrt/run-openwrt-qemu.sh
-openwrt/run-armsr-matrix.sh                          # cortex-a53 and max (PAC, BTI, SVE), each with NOTIME32=0/1
-```
-
-Results (OpenWrt 25.12.6 with kernel 6.12.114 and `ilp32-6.12.y` `a2b38d6f5f`, pointer authentication,
-BTI and SVE on): cortex-a53 and max, 23/23 checks pass, and 22/22 with `NOTIME32=1`.
+The OpenWrt QEMU and memory tests moved to [ilp32wrt/tests](https://github.com/ilp32wrt/tests), with
+their history, and the release build script and configurations to `release/` of
+[ilp32wrt/ilp32wrt](https://github.com/ilp32wrt/ilp32wrt) (branch `main`). The last version here is commit
+`7c0f3f0`, used by the ILP32Wrt releases up to v25.12.6-ilp32.3.
 
 ## Results
 
